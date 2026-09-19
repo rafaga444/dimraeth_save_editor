@@ -1,0 +1,14 @@
+void nativeInit(void);
+void nativeAdd(char *kind,int ident,int page,int x,int y,int w,int h,char *text);
+char *nativeText(int ident);
+void nativeSetText(int ident,char *text);
+void nativeOptions(int ident,char *json);
+int nativeSelection(int ident);
+void nativeSelect(int ident,int index);
+void nativeEnable(int ident,int enabled);
+void nativeShow(int ident,int visible);
+char *nativePick(int folder);
+void nativeAlert(char *title,char *message);
+int nativeConfirm(char *title,char *message);
+void nativeRun(void);
+void nativeStop(void);

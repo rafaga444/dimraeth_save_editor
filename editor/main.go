@@ -1,0 +1,521 @@
+package main
+
+import (
+	"fmt"
+	"runtime"
+	"sort"
+	"strconv"
+	"strings"
+)
+
+const (
+	quitID        = 1
+	gamePathID    = 10
+	browseGameID  = 11
+	loadGameID    = 12
+	catalogInfoID = 13
+	savePathID    = 20
+	browseSaveID  = 21
+	loadSaveID    = 22
+	backupID      = 23
+	saveID        = 24
+	saveInfoID    = 25
+	groupID       = 30
+	searchID      = 31
+	fieldsID      = 32
+	fieldPathID   = 33
+	valueID       = 34
+	boolID        = 35
+	applyID       = 36
+	fieldInfoID   = 37
+	countID       = 38
+	itemSearchID  = 40
+	itemID        = 41
+	quantityID    = 42
+	addID         = 43
+	inventoryID   = 44
+	slotsID       = 45
+	multiplierID  = 50
+	rarityID      = 51
+	patchID       = 52
+	dllInfoID     = 53
+	statusID      = 60
+)
+
+type desktopUI interface {
+	init()
+	add(kind string, id, page, x, y, w, h int, text string)
+	text(id int) string
+	setText(id int, text string)
+	options(id int, items []string)
+	selection(id int) int
+	selectIndex(id, index int)
+	enable(id int, enabled bool)
+	show(id int, visible bool)
+	pick(folder bool) string
+	alert(title, message string)
+	confirm(title, message string) bool
+	run()
+	stop()
+}
+
+type desktopApp struct {
+	ui                       desktopUI
+	save                     *Save
+	catalog                  *Catalog
+	allFields, visibleFields []Field
+	groups                   []string
+	matchingItems            []Item
+	inventoryPaths           [][]string
+	selected                 *Field
+	dirty, updating          bool
+}
+
+var desktop *desktopApp
+
+func main() {
+	runtime.LockOSThread()
+	desktop = &desktopApp{ui: newDesktopUI()}
+	desktop.ui.init()
+	desktop.build()
+	desktop.ui.run()
+}
+func (a *desktopApp) build() {
+	a.updating = true
+	defer func() { a.updating = false }()
+	u := a.ui
+	u.add("heading", 100, -1, 20, 10, 900, 26, "DIMRAETH  /  SAVE WORKSHOP")
+	u.add("label", 101, -1, 20, 42, 110, 24, "Game folder")
+	u.add("entry", gamePathID, -1, 130, 40, 690, 28, "")
+	u.add("button", browseGameID, -1, 830, 40, 100, 30, "Browse…")
+	u.add("button", loadGameID, -1, 940, 40, 170, 30, "Load item catalog")
+	u.add("label", catalogInfoID, -1, 20, 77, 1090, 25, "Select a game installation to load item IDs and names.")
+	u.add("label", 102, 0, 15, 8, 150, 22, "Save file path")
+	u.add("entry", savePathID, 0, 15, 32, 850, 28, "")
+	u.add("button", browseSaveID, 0, 875, 31, 95, 30, "Browse…")
+	u.add("button", loadSaveID, 0, 980, 31, 95, 30, "Open")
+	u.add("label", saveInfoID, 0, 15, 70, 740, 30, "No save file is open.")
+	u.add("button", backupID, 0, 785, 69, 145, 30, "Create backup")
+	u.add("button", saveID, 0, 940, 69, 135, 30, "Save")
+	u.add("label", 103, 0, 15, 112, 260, 22, "Parameter section")
+	u.add("combo", groupID, 0, 15, 135, 340, 28, "")
+	u.add("label", 104, 0, 370, 112, 275, 22, "Search parameters")
+	u.add("entry", searchID, 0, 370, 135, 290, 28, "")
+	u.add("list", fieldsID, 0, 15, 178, 645, 236, "")
+	u.add("heading", 105, 0, 685, 135, 390, 26, "Edit selected parameter")
+	u.add("label", fieldPathID, 0, 685, 179, 390, 60, "Select a parameter or an inventory row.")
+	u.add("entry", valueID, 0, 685, 253, 390, 30, "")
+	u.add("combo", boolID, 0, 685, 253, 390, 30, "")
+	u.options(boolID, []string{"False", "True"})
+	u.add("button", applyID, 0, 685, 296, 180, 32, "Apply value")
+	u.add("label", fieldInfoID, 0, 685, 342, 390, 72, "Changes stay in memory until you click Save.")
+	u.add("label", countID, 0, 15, 420, 640, 24, "")
+	u.add("heading", 106, 0, 15, 452, 440, 25, "Inventory  /  Add an item")
+	u.add("label", 107, 0, 15, 483, 260, 22, "Search name or ID")
+	u.add("label", 108, 0, 300, 483, 470, 22, "Item")
+	u.add("label", 109, 0, 790, 483, 110, 22, "Quantity")
+	u.add("entry", itemSearchID, 0, 15, 506, 270, 28, "")
+	u.add("combo", itemID, 0, 300, 506, 475, 28, "")
+	u.add("entry", quantityID, 0, 790, 506, 100, 28, "1")
+	u.add("button", addID, 0, 905, 505, 170, 30, "Add item")
+	u.add("list", inventoryID, 0, 15, 548, 1060, 99, "")
+	u.add("label", slotsID, 0, 15, 654, 1060, 25, "Select an inventory row to edit its quantity. New items use empty slots.")
+	u.add("heading", 110, 1, 22, 20, 800, 30, "Loot settings")
+	u.add("label", 111, 1, 22, 67, 1020, 54, "Set the drop chance multiplier and force a rarity for generated runes and equipment.")
+	u.add("label", 112, 1, 22, 138, 440, 25, "Drop chance multiplier")
+	u.add("entry", multiplierID, 1, 22, 174, 400, 32, "3")
+	u.add("label", 113, 1, 470, 138, 520, 25, "Rune and equipment rarity")
+	u.add("combo", rarityID, 1, 470, 174, 500, 32, "")
+	u.options(rarityID, []string{"Rarity.Common = 0", "Rarity.Uncommon = 1", "Rarity.Rare = 2", "Rarity.Mythical = 3", "Rarity.Heroic = 4", "Rarity.Ancient = 5"})
+	u.selectIndex(rarityID, 5)
+	u.add("label", 114, 1, 22, 249, 1020, 92, "Close the game before saving. A backup is created before GameAssembly.dll is replaced.\nThe rarity patch affects generated runes and equipment.")
+	u.add("label", dllInfoID, 1, 22, 374, 1020, 75, "Select the game folder first.")
+	u.add("button", patchID, 1, 22, 478, 210, 36, "Save")
+	u.add("label", 115, 1, 22, 544, 1020, 82, "Supports the DLL version used by the original loot patcher and repeat edits of that patch. Unknown DLL versions are rejected before any changes are written.")
+	u.add("label", statusID, -1, 20, 845, 1090, 42, "Ready. All file operations run inside this application.")
+	u.show(boolID, false)
+	a.refreshEnabled()
+}
+func (a *desktopApp) refreshEnabled() {
+	u := a.ui
+	for _, id := range []int{backupID, saveID, groupID, searchID, fieldsID, inventoryID} {
+		u.enable(id, a.save != nil)
+	}
+	u.enable(applyID, a.selected != nil && a.selected.Type != "null")
+	u.enable(valueID, a.selected != nil && a.selected.Type != "null")
+	u.enable(boolID, a.selected != nil)
+	u.enable(addID, a.save != nil && len(a.matchingItems) > 0)
+	u.enable(patchID, a.catalog != nil)
+}
+func (a *desktopApp) status(s string) { a.ui.setText(statusID, s) }
+func (a *desktopApp) fail(e error) {
+	if e == nil {
+		return
+	}
+	a.status(e.Error())
+	a.ui.alert("Dimraeth Editor", e.Error())
+}
+func (a *desktopApp) pending() bool {
+	if a.selected == nil || a.selected.Type == "null" {
+		return false
+	}
+	return a.value() != a.selected.Value
+}
+func (a *desktopApp) value() string {
+	if a.selected != nil && a.selected.Type == "boolean" {
+		return strconv.FormatBool(a.ui.selection(boolID) == 1)
+	}
+	return a.ui.text(valueID)
+}
+func (a *desktopApp) commit() error {
+	if !a.pending() {
+		return nil
+	}
+	value := a.value()
+	doc, e := applyEdits(a.save.doc, []Edit{{Path: a.selected.Path, Value: value}})
+	if e != nil {
+		return e
+	}
+	a.save.doc = doc
+	a.dirty = true
+	a.selected.Value = value
+	a.allFields = fields(doc)
+	path := strings.Join(a.selected.Path, ".")
+	for i := range a.visibleFields {
+		if strings.Join(a.visibleFields[i].Path, ".") == path {
+			a.visibleFields[i].Value = value
+		}
+	}
+	name := a.save.doc["playerData"].(map[string]any)["characterName"]
+	a.ui.setText(saveInfoID, fmt.Sprintf("%v  •  Unsaved changes", name))
+	return nil
+}
+func (a *desktopApp) refreshSave() {
+	a.updating = true
+	defer func() { a.updating = false }()
+	a.allFields = fields(a.save.doc)
+	old := "playerData"
+	if n := a.ui.selection(groupID); n >= 0 && n < len(a.groups) {
+		old = a.groups[n]
+	}
+	groups := map[string]bool{}
+	for _, f := range a.allFields {
+		groups[f.Group] = true
+	}
+	a.groups = []string{"All sections"}
+	rest := []string{}
+	for g := range groups {
+		rest = append(rest, g)
+	}
+	sort.Strings(rest)
+	a.groups = append(a.groups, rest...)
+	a.ui.options(groupID, a.groups)
+	sel := 0
+	for i, g := range a.groups {
+		if g == old {
+			sel = i
+		}
+	}
+	a.ui.selectIndex(groupID, sel)
+	a.ui.setText(savePathID, a.save.path)
+	name := a.save.doc["playerData"].(map[string]any)["characterName"]
+	state := "Saved"
+	if a.dirty {
+		state = "Unsaved changes"
+	}
+	a.ui.setText(saveInfoID, fmt.Sprintf("%v  •  %s", name, state))
+	a.filterFields()
+	a.refreshInventory()
+	a.refreshEnabled()
+}
+func labelFor(f Field) string {
+	key := f.Path[len(f.Path)-1]
+	names := map[string]string{"characterName": "Character name", "characterGold": "Gold", "characterLevel": "Level", "characterXP": "XP", "characterHealth": "Health", "characterSkillPoints": "Skill points", "characterStamina": "Stamina", "characterConcentration": "Concentration"}
+	if n := names[key]; n != "" {
+		return n
+	}
+	return key
+}
+func (a *desktopApp) filterFields() {
+	old := a.updating
+	a.updating = true
+	defer func() { a.updating = old }()
+	q := strings.ToLower(a.ui.text(searchID))
+	group := "All sections"
+	if n := a.ui.selection(groupID); n >= 0 && n < len(a.groups) {
+		group = a.groups[n]
+	}
+	selectedPath := ""
+	if a.selected != nil {
+		selectedPath = strings.Join(a.selected.Path, ".")
+	}
+	a.visibleFields = nil
+	rows := []string{}
+	sel := -1
+	for _, f := range a.allFields {
+		path := strings.Join(f.Path, ".")
+		if group != "All sections" && f.Group != group {
+			continue
+		}
+		if q != "" && !strings.Contains(strings.ToLower(path+" "+labelFor(f)), q) {
+			continue
+		}
+		if path == selectedPath {
+			sel = len(rows)
+		}
+		a.visibleFields = append(a.visibleFields, f)
+		v := strings.ReplaceAll(f.Value, "\n", " ")
+		if len(v) > 110 {
+			v = v[:110] + "…"
+		}
+		rows = append(rows, labelFor(f)+"   =   "+v+"   ["+path+"]")
+	}
+	a.ui.options(fieldsID, rows)
+	a.ui.selectIndex(fieldsID, sel)
+	a.ui.setText(countID, fmt.Sprintf("%d parameters. Select a row, enter a value, then click Apply value or Save.", len(rows)))
+}
+func (a *desktopApp) showField(f Field) {
+	a.selected = &f
+	a.ui.setText(fieldPathID, strings.Join(f.Path, "."))
+	a.ui.setText(valueID, f.Value)
+	a.ui.show(valueID, f.Type != "boolean")
+	a.ui.show(boolID, f.Type == "boolean")
+	if f.Type == "boolean" {
+		n := 0
+		if f.Value == "true" {
+			n = 1
+		}
+		a.ui.selectIndex(boolID, n)
+	}
+	a.ui.setText(fieldInfoID, "Type: "+f.Type+"\nChanges stay in memory until you click Save.")
+	a.refreshEnabled()
+}
+func (a *desktopApp) filterItems() {
+	old := a.updating
+	a.updating = true
+	defer func() { a.updating = old }()
+	q := strings.ToLower(a.ui.text(itemSearchID))
+	a.matchingItems = nil
+	rows := []string{}
+	if a.catalog != nil {
+		for _, item := range a.catalog.Items {
+			if q == "" || strings.Contains(strings.ToLower(item.Name+" "+item.Symbol+" "+strconv.Itoa(item.ID)), q) {
+				a.matchingItems = append(a.matchingItems, item)
+				rows = append(rows, fmt.Sprintf("%s   #%d", item.Name, item.ID))
+			}
+		}
+	}
+	a.ui.options(itemID, rows)
+	a.ui.selectIndex(itemID, 0)
+	a.refreshEnabled()
+}
+func (a *desktopApp) refreshInventory() {
+	old := a.updating
+	a.updating = true
+	defer func() { a.updating = old }()
+	p := a.save.doc["playerData"].(map[string]any)
+	inv, _ := p["characterInventory"].([]any)
+	a.inventoryPaths = nil
+	rows := []string{}
+	for i, x := range inv {
+		v, ok := x.(map[string]any)
+		if !ok || number(v["Kind"]) == 0 {
+			continue
+		}
+		id := int(number(v["Item"]))
+		name := fmt.Sprintf("Item #%d", id)
+		if number(v["Kind"]) != 1 {
+			name = "Rune / pet"
+		} else if a.catalog != nil {
+			for _, item := range a.catalog.Items {
+				if item.ID == id {
+					name = item.Name
+					break
+				}
+			}
+		}
+		rows = append(rows, fmt.Sprintf("Slot %d   |   %s   |   ID %d   |   Quantity %v", i+1, name, id, v["Amount"]))
+		a.inventoryPaths = append(a.inventoryPaths, []string{"playerData", "characterInventory", strconv.Itoa(i), "Amount"})
+	}
+	a.ui.options(inventoryID, rows)
+	a.ui.setText(slotsID, fmt.Sprintf("%d used / %d empty slots. Select a row to edit its quantity. Item names come from ItemType.", len(rows), len(inv)-len(rows)))
+}
+func (a *desktopApp) event(id int) {
+	if a.updating {
+		return
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			a.fail(fmt.Errorf("Operation failed: %v", r))
+		}
+	}()
+	switch id {
+	case quitID:
+		if (a.dirty || a.pending()) && !a.ui.confirm("Unsaved changes", "Quit without saving your changes?") {
+			return
+		}
+		a.ui.stop()
+	case browseGameID:
+		if p := a.ui.pick(true); p != "" {
+			a.ui.setText(gamePathID, p)
+			a.event(loadGameID)
+		}
+	case loadGameID:
+		a.status("Reading game metadata and DLL…")
+		c, e := loadCatalog(strings.TrimSpace(a.ui.text(gamePathID)))
+		if e != nil {
+			a.fail(e)
+			return
+		}
+		a.catalog = c
+		a.ui.setText(catalogInfoID, fmt.Sprintf("%d items  •  Metadata v%d  •  Assembly-CSharp DLL verified", len(c.Items), c.Version))
+		a.ui.setText(dllInfoID, c.DLL)
+		a.filterItems()
+		if a.save != nil {
+			a.refreshInventory()
+		}
+		a.refreshEnabled()
+		a.status("Item catalog loaded.")
+	case browseSaveID:
+		if p := a.ui.pick(false); p != "" {
+			a.ui.setText(savePathID, p)
+			a.event(loadSaveID)
+		}
+	case loadSaveID:
+		if (a.dirty || a.pending()) && !a.ui.confirm("Unsaved changes", "Open another file and discard unsaved changes?") {
+			return
+		}
+		s, e := loadSave(strings.TrimSpace(a.ui.text(savePathID)))
+		if e != nil {
+			a.fail(e)
+			return
+		}
+		a.save = s
+		a.dirty = false
+		a.selected = nil
+		a.ui.setText(valueID, "")
+		a.ui.setText(fieldPathID, "Select a parameter or an inventory row.")
+		a.ui.show(valueID, true)
+		a.ui.show(boolID, false)
+		a.refreshSave()
+		a.status("Save file decrypted and opened.")
+	case groupID, searchID:
+		if e := a.commit(); e != nil {
+			a.fail(e)
+			return
+		}
+		if a.save != nil {
+			a.allFields = fields(a.save.doc)
+			a.filterFields()
+		}
+	case fieldsID:
+		n := a.ui.selection(fieldsID)
+		if n < 0 || n >= len(a.visibleFields) {
+			return
+		}
+		f := a.visibleFields[n]
+		if e := a.commit(); e != nil {
+			a.fail(e)
+			return
+		}
+		a.showField(f)
+		a.filterFields()
+		a.refreshInventory()
+	case inventoryID:
+		n := a.ui.selection(inventoryID)
+		if n < 0 || n >= len(a.inventoryPaths) {
+			return
+		}
+		if e := a.commit(); e != nil {
+			a.fail(e)
+			return
+		}
+		for _, f := range fields(a.save.doc) {
+			if strings.Join(f.Path, ".") == strings.Join(a.inventoryPaths[n], ".") {
+				a.showField(f)
+				break
+			}
+		}
+	case applyID:
+		if e := a.commit(); e != nil {
+			a.fail(e)
+			return
+		}
+		a.refreshSave()
+		a.status("Value applied. Click Save to write the encrypted file.")
+	case saveID:
+		if a.save == nil {
+			return
+		}
+		if e := a.commit(); e != nil {
+			a.fail(e)
+			return
+		}
+		b, e := a.save.write(a.save.doc)
+		if e != nil {
+			a.fail(e)
+			return
+		}
+		a.dirty = false
+		a.refreshSave()
+		a.status("Save file encrypted and written. Backup: " + b)
+	case backupID:
+		if a.save == nil {
+			return
+		}
+		b, e := backup(a.save.path)
+		if e != nil {
+			a.fail(e)
+			return
+		}
+		a.status("Backup created: " + b)
+	case itemSearchID:
+		a.filterItems()
+	case addID:
+		if a.save == nil {
+			return
+		}
+		n := a.ui.selection(itemID)
+		if n < 0 || n >= len(a.matchingItems) {
+			a.fail(fmt.Errorf("Select an item"))
+			return
+		}
+		q, e := strconv.Atoi(strings.TrimSpace(a.ui.text(quantityID)))
+		if e != nil {
+			a.fail(fmt.Errorf("Quantity must be an integer"))
+			return
+		}
+		if e = a.commit(); e != nil {
+			a.fail(e)
+			return
+		}
+		doc, e := applyEdits(a.save.doc, nil)
+		if e == nil {
+			e = addItem(doc, a.matchingItems[n].ID, q, a.catalog)
+		}
+		if e != nil {
+			a.fail(e)
+			return
+		}
+		a.save.doc = doc
+		a.dirty = true
+		a.refreshSave()
+		a.status("Item added. Click Save to write the encrypted file.")
+	case patchID:
+		if a.catalog == nil {
+			return
+		}
+		m, e := strconv.ParseFloat(strings.TrimSpace(a.ui.text(multiplierID)), 64)
+		if e != nil {
+			a.fail(fmt.Errorf("Multiplier must be a positive number"))
+			return
+		}
+		a.status("Checking and patching GameAssembly.dll…")
+		b, e := patchFile(a.catalog.DLL, m, a.ui.selection(rarityID))
+		if e != nil {
+			a.fail(e)
+			return
+		}
+		a.status("Patch applied. Backup: " + b)
+	}
+}
