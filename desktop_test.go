@@ -86,3 +86,28 @@ func TestNativeInvalidEditDoesNotSwitchField(t *testing.T) {
 		t.Fatal("invalid edit changed selection or document")
 	}
 }
+
+func TestSynchronizeButtonCommitsPendingLevel(t *testing.T) {
+	doc, e := decodeJSON([]byte(`{"playerData":{"characterName":"Test","characterLevel":22,"characterHighestLevel":22,"characterAccumulatedXP":551,"characterAllTimeXP":0,"characterXP":5928,"characterInventory":[]}}`))
+	if e != nil {
+		t.Fatal(e)
+	}
+	u := newTestUI()
+	a := &desktopApp{ui: u, save: &Save{doc: doc}}
+	a.refreshSave()
+	for _, f := range a.allFields {
+		if f.Path[len(f.Path)-1] == "characterLevel" {
+			a.showField(f)
+			break
+		}
+	}
+	u.setText(valueID, "23")
+	a.event(syncXPID)
+	p := a.save.doc["playerData"].(map[string]any)
+	if number(p["characterAllTimeXP"]) != 99872 || number(p["characterHighestLevel"]) != 23 || !a.dirty {
+		t.Fatal("synchronization lost the pending edit", p)
+	}
+	if a.pending() || u.text(valueID) != "23" {
+		t.Fatal("synchronization left stale field text")
+	}
+}

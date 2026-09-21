@@ -1,5 +1,5 @@
 # Generated application builds
-/editor/dist/
+/dist/
 
 # Local system and Python cache files
 .DS_Store

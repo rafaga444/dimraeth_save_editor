@@ -6,7 +6,7 @@
 - Python 3.
 - For macOS builds: macOS with Xcode Command Line Tools installed.
 
-Run the following commands from the `editor` directory.
+Run the following commands from the repository root (the `editor` directory).
 
 ## Build all targets on macOS
 
@@ -58,7 +58,3 @@ Generated applications are written to `dist/`:
 The build helper signs macOS bundles locally and checks that each executable
 and complete `.app` bundle is no larger than 5,000,000 bytes. The build fails
 if this limit is exceeded.
-
-The IL2CPP format implementation was checked against
-[Il2CppDumper MetadataClass.cs](https://github.com/Perfare/Il2CppDumper/blob/master/Il2CppDumper/Il2Cpp/MetadataClass.cs)
-and [BinaryReaderExtensions.cs](https://github.com/Perfare/Il2CppDumper/blob/master/Il2CppDumper/Extensions/BinaryReaderExtensions.cs).

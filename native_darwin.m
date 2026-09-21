@@ -71,7 +71,7 @@ void nativeAdd(char *kind,int ident,int page,int x,int y,int w,int h,char *text)
    control=view=field;
   }
   controls[@(ident)]=control;[control setAccessibilityIdentifier:[NSString stringWithFormat:@"control-%d",ident]];
-  NSDictionary *names=@{@10:@"Game folder",@20:@"Save file path",@30:@"Parameter section",@31:@"Search parameters",@32:@"Parameters",@34:@"Parameter value",@35:@"Boolean value",@40:@"Search items",@41:@"Item",@42:@"Quantity",@44:@"Inventory",@50:@"Drop chance multiplier",@51:@"Rarity"};
+  NSDictionary *names=@{@10:@"Game folder",@20:@"Save file path",@30:@"Parameter section",@31:@"Search parameters",@32:@"Parameters",@34:@"Parameter value",@35:@"Boolean value",@40:@"Search items",@41:@"Item",@42:@"Quantity",@44:@"Inventory",@50:@"Drop chance multiplier",@51:@"Rarity",@54:@"RNG eliminator",@55:@"Forced stars"};
   [control setAccessibilityLabel:names[@(ident)] ?: S(text)];
   [(page<0?root:pages[page]) addSubview:view];
  }

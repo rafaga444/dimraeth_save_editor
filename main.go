@@ -20,6 +20,7 @@ const (
 	backupID      = 23
 	saveID        = 24
 	saveInfoID    = 25
+	syncXPID      = 26
 	groupID       = 30
 	searchID      = 31
 	fieldsID      = 32
@@ -39,6 +40,8 @@ const (
 	rarityID      = 51
 	patchID       = 52
 	dllInfoID     = 53
+	rngModeID     = 54
+	starsID       = 55
 	statusID      = 60
 )
 
@@ -94,7 +97,8 @@ func (a *desktopApp) build() {
 	u.add("entry", savePathID, 0, 15, 32, 850, 28, "")
 	u.add("button", browseSaveID, 0, 875, 31, 95, 30, "Browse…")
 	u.add("button", loadSaveID, 0, 980, 31, 95, 30, "Open")
-	u.add("label", saveInfoID, 0, 15, 70, 740, 30, "No save file is open.")
+	u.add("label", saveInfoID, 0, 15, 70, 500, 30, "No save file is open.")
+	u.add("button", syncXPID, 0, 550, 69, 220, 30, "Synchronize level / XP")
 	u.add("button", backupID, 0, 785, 69, 145, 30, "Create backup")
 	u.add("button", saveID, 0, 940, 69, 135, 30, "Save")
 	u.add("label", 103, 0, 15, 112, 260, 22, "Parameter section")
@@ -128,17 +132,26 @@ func (a *desktopApp) build() {
 	u.add("combo", rarityID, 1, 470, 174, 500, 32, "")
 	u.options(rarityID, []string{"Rarity.Common = 0", "Rarity.Uncommon = 1", "Rarity.Rare = 2", "Rarity.Mythical = 3", "Rarity.Heroic = 4", "Rarity.Ancient = 5"})
 	u.selectIndex(rarityID, 5)
-	u.add("label", 114, 1, 22, 249, 1020, 92, "Close the game before saving. A backup is created before GameAssembly.dll is replaced.\nThe rarity patch affects generated runes and equipment.")
-	u.add("label", dllInfoID, 1, 22, 374, 1020, 75, "Select the game folder first.")
-	u.add("button", patchID, 1, 22, 478, 210, 36, "Save")
-	u.add("label", 115, 1, 22, 544, 1020, 82, "Supports the DLL version used by the original loot patcher and repeat edits of that patch. Unknown DLL versions are rejected before any changes are written.")
+	u.add("label", 116, 1, 22, 230, 400, 25, "RNG eliminator")
+	u.add("combo", rngModeID, 1, 22, 262, 400, 32, "")
+	u.options(rngModeID, []string{"Keep existing RNG patch", "Disable RNG eliminator", "Enable RNG eliminator"})
+	u.selectIndex(rngModeID, rngKeep)
+	u.add("label", 117, 1, 470, 230, 500, 25, "Forced stars (runes and equipment)")
+	u.add("combo", starsID, 1, 470, 262, 500, 32, "")
+	u.options(starsID, []string{"1★ — requires level 1", "2★ — requires level 5", "3★ — requires level 10", "4★ — requires level 15", "5★ — requires level 20", "6★ — requires level 25", "7★ — requires level 30", "8★ — requires level 35", "9★ — requires level 40"})
+	u.selectIndex(starsID, 5)
+	u.add("label", 118, 1, 22, 320, 1020, 52, "Star requirements: 1★ → lvl 1   |   2★ → 5   |   3★ → 10   |   4★ → 15   |   5★ → 20\n6★ → 25   |   7★ → 30   |   8★ → 35   |   9★ → 40")
+	u.add("label", 119, 1, 22, 380, 1020, 56, "6★ matches the current level-25 cap. Higher stars require higher levels; this patch does not raise the cap.\nRNG eliminator guarantees configured item and equipment drops. Slots, sets and affixes remain random.")
+	u.add("label", dllInfoID, 1, 22, 454, 1020, 48, "Select the game folder first.")
+	u.add("button", patchID, 1, 22, 520, 210, 36, "Save")
+	u.add("label", 114, 1, 22, 574, 1020, 72, "Close the game before saving. A backup is created before GameAssembly.dll is replaced.\nDisable restores the original RNG rolls and star selection, keeping your multiplier and rarity.\nUnknown patch instructions are rejected before any changes are written.")
 	u.add("label", statusID, -1, 20, 845, 1090, 42, "Ready. All file operations run inside this application.")
 	u.show(boolID, false)
 	a.refreshEnabled()
 }
 func (a *desktopApp) refreshEnabled() {
 	u := a.ui
-	for _, id := range []int{backupID, saveID, groupID, searchID, fieldsID, inventoryID} {
+	for _, id := range []int{backupID, saveID, syncXPID, groupID, searchID, fieldsID, inventoryID} {
 		u.enable(id, a.save != nil)
 	}
 	u.enable(applyID, a.selected != nil && a.selected.Type != "null")
@@ -146,6 +159,7 @@ func (a *desktopApp) refreshEnabled() {
 	u.enable(boolID, a.selected != nil)
 	u.enable(addID, a.save != nil && len(a.matchingItems) > 0)
 	u.enable(patchID, a.catalog != nil)
+	u.enable(starsID, a.ui.selection(rngModeID) == rngEnable)
 }
 func (a *desktopApp) status(s string) { a.ui.setText(statusID, s) }
 func (a *desktopApp) fail(e error) {
@@ -230,7 +244,7 @@ func (a *desktopApp) refreshSave() {
 }
 func labelFor(f Field) string {
 	key := f.Path[len(f.Path)-1]
-	names := map[string]string{"characterName": "Character name", "characterGold": "Gold", "characterLevel": "Level", "characterXP": "XP", "characterHealth": "Health", "characterSkillPoints": "Skill points", "characterStamina": "Stamina", "characterConcentration": "Concentration"}
+	names := map[string]string{"characterName": "Character name", "characterGold": "Gold", "characterLevel": "Level", "characterXP": "Spendable XP", "characterAccumulatedXP": "XP toward next level", "characterAllTimeXP": "All-time XP", "characterHighestLevel": "Highest level", "characterHealth": "Health", "characterSkillPoints": "Skill points", "characterStamina": "Stamina", "characterConcentration": "Concentration"}
 	if n := names[key]; n != "" {
 		return n
 	}
@@ -287,7 +301,7 @@ func (a *desktopApp) showField(f Field) {
 		}
 		a.ui.selectIndex(boolID, n)
 	}
-	a.ui.setText(fieldInfoID, "Type: "+f.Type+"\nChanges stay in memory until you click Save.")
+	a.ui.setText(fieldInfoID, fieldHelp(f))
 	a.refreshEnabled()
 }
 func (a *desktopApp) filterItems() {
@@ -501,6 +515,33 @@ func (a *desktopApp) event(id int) {
 		a.dirty = true
 		a.refreshSave()
 		a.status("Item added. Click Save to write the encrypted file.")
+	case syncXPID:
+		if a.save == nil {
+			return
+		}
+		if e := a.commit(); e != nil {
+			a.fail(e)
+			return
+		}
+		doc, e := synchronizeProgression(a.save.doc)
+		if e != nil {
+			a.fail(e)
+			return
+		}
+		a.save.doc = doc
+		a.dirty = true
+		a.refreshSave()
+		if a.selected != nil {
+			for _, f := range a.allFields {
+				if strings.Join(f.Path, ".") == strings.Join(a.selected.Path, ".") {
+					a.showField(f)
+					break
+				}
+			}
+		}
+		a.status("Level, level progress and all-time XP synchronized. Spendable XP and attributes are unchanged. Click Save to write.")
+	case rngModeID:
+		a.refreshEnabled()
 	case patchID:
 		if a.catalog == nil {
 			return
@@ -511,7 +552,7 @@ func (a *desktopApp) event(id int) {
 			return
 		}
 		a.status("Checking and patching GameAssembly.dll…")
-		b, e := patchFile(a.catalog.DLL, m, a.ui.selection(rarityID))
+		b, e := patchLootFile(a.catalog.DLL, m, a.ui.selection(rarityID), a.ui.selection(rngModeID), a.ui.selection(starsID)+1)
 		if e != nil {
 			a.fail(e)
 			return

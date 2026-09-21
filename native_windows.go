@@ -130,13 +130,7 @@ func windowProc(h uintptr, m uint32, wp, lp uintptr) uintptr {
 				n := (*notifyHeader)(unsafe.Pointer(lp))
 				if n.From == win.tabs && int32(n.Code) == -551 {
 					index := int(msg(win.tabs, 0x130b, 0, 0))
-					for i, p := range win.pages {
-						show := uintptr(0)
-						if i == index {
-							show = 5
-						}
-						user32.NewProc("ShowWindow").Call(p, show)
-					}
+					win.selectPage(index)
 					return 0
 				}
 			}
@@ -144,6 +138,20 @@ func windowProc(h uintptr, m uint32, wp, lp uintptr) uintptr {
 	}
 	r, _, _ := user32.NewProc("DefWindowProcW").Call(h, uintptr(m), wp, lp)
 	return r
+}
+func (w *windowsUI) selectPage(index int) {
+	if index < 0 || index >= len(w.pages) {
+		return
+	}
+	for i, p := range w.pages {
+		if i != index {
+			user32.NewProc("ShowWindow").Call(p, 0)
+		}
+	}
+	// Pages are siblings of the tab control. ShowWindow alone leaves them
+	// underneath its opaque client area; explicitly raise the active page.
+	user32.NewProc("SetWindowPos").Call(w.pages[index], 0, 0, 0, 0, 0, 0x53) // TOP, NOMOVE | NOSIZE | NOACTIVATE | SHOWWINDOW
+	user32.NewProc("RedrawWindow").Call(w.root, 0, 0, 0x185)                 // INVALIDATE | ERASE | ALLCHILDREN | UPDATENOW
 }
 func (w *windowsUI) init() {
 	// Use built-in common controls and the process's UI thread; no browser runtime.
@@ -179,9 +187,9 @@ func (w *windowsUI) init() {
 	for i, title := range []string{"Save editor", "Loot patcher"} {
 		item := tabItem{Mask: 1, Text: wide(title)}
 		msg(w.tabs, 0x133e, uintptr(i), uintptr(unsafe.Pointer(&item)))
-		w.pages[i] = w.create("DimraethNativeWindow", "", 0x40000000|0x04000000, 0x10000, w.root, 210+i, 20, 145, 1090, 686)
+		w.pages[i] = w.create("DimraethNativeWindow", "", 0x40000000|0x04000000|0x02000000, 0x10000, w.root, 210+i, 20, 145, 1090, 686)
 	}
-	user32.NewProc("ShowWindow").Call(w.pages[0], 5)
+	w.selectPage(0)
 }
 func (w *windowsUI) add(kind string, id, page, x, y, width, height int, text string) {
 	parent := w.root
