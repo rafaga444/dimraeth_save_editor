@@ -9,6 +9,7 @@ type testUI struct {
 	rows         map[int][]string
 	allowDiscard bool
 	stopped      bool
+	alerts       []string
 }
 
 func newTestUI() *testUI {
@@ -24,7 +25,7 @@ func (u *testUI) selectIndex(id, n int)                          { u.choices[id]
 func (*testUI) enable(int, bool)                                 {}
 func (*testUI) show(int, bool)                                   {}
 func (*testUI) pick(bool) string                                 { return "" }
-func (*testUI) alert(string, string)                             {}
+func (u *testUI) alert(title, message string)                    { u.alerts = append(u.alerts, title+": "+message) }
 func (u *testUI) confirm(string, string) bool                    { return u.allowDiscard }
 func (*testUI) run()                                             {}
 func (u *testUI) stop()                                          { u.stopped = true }
@@ -93,6 +94,7 @@ func TestSynchronizeButtonCommitsPendingLevel(t *testing.T) {
 		t.Fatal(e)
 	}
 	u := newTestUI()
+	u.setText(maxLevelID, "25")
 	a := &desktopApp{ui: u, save: &Save{doc: doc}}
 	a.refreshSave()
 	for _, f := range a.allFields {

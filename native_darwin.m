@@ -50,7 +50,7 @@ void nativeInit(void) {
   window.title=@"Dimraeth Editor";window.delegate=controller;
   root=[[WorkshopView alloc] initWithFrame:NSMakeRect(0,0,1130*scale,895*scale)];root.bounds=NSMakeRect(0,0,1130,895);window.contentView=root;
   NSTabView *tabs=[[NSTabView alloc] initWithFrame:NSMakeRect(15,112,1100,721)];
-  NSArray *titles=@[@"Save editor",@"Loot patcher"];
+  NSArray *titles=@[@"Save editor",@"Patcher"];
   for(int i=0;i<2;i++){NSTabViewItem *item=[[NSTabViewItem alloc] initWithIdentifier:@(i)];item.label=titles[i];pages[i]=[[WorkshopView alloc] initWithFrame:NSMakeRect(0,0,1090,686)];item.view=pages[i];[tabs addTabViewItem:item];}
   [root addSubview:tabs];[window center];
  }
@@ -59,6 +59,7 @@ void nativeAdd(char *kind,int ident,int page,int x,int y,int w,int h,char *text)
  @autoreleasepool {
   NSRect rect=NSMakeRect(x,y,w,h);NSString *k=S(kind);NSView *view;id control;
   if([k isEqualToString:@"button"]){NSButton *b=[[NSButton alloc] initWithFrame:rect];b.title=S(text);b.bezelStyle=NSBezelStyleRounded;b.target=controller;b.action=@selector(control:);b.tag=ident;if(ident==24){b.keyEquivalent=@"s";}control=view=b;}
+  else if([k isEqualToString:@"toggle"]){NSButton *b=[[NSButton alloc] initWithFrame:rect];[b setButtonType:NSButtonTypeSwitch];b.title=S(text);b.target=controller;b.action=@selector(control:);b.tag=ident;control=view=b;}
   else if([k isEqualToString:@"combo"]){NSPopUpButton *p=[[NSPopUpButton alloc] initWithFrame:rect pullsDown:NO];p.target=controller;p.action=@selector(control:);p.tag=ident;control=view=p;}
   else if([k isEqualToString:@"list"]){
    NSScrollView *scroll=[[NSScrollView alloc] initWithFrame:rect];scroll.hasVerticalScroller=YES;scroll.hasHorizontalScroller=YES;scroll.borderType=NSBezelBorder;
@@ -71,7 +72,7 @@ void nativeAdd(char *kind,int ident,int page,int x,int y,int w,int h,char *text)
    control=view=field;
   }
   controls[@(ident)]=control;[control setAccessibilityIdentifier:[NSString stringWithFormat:@"control-%d",ident]];
-  NSDictionary *names=@{@10:@"Game folder",@20:@"Save file path",@30:@"Parameter section",@31:@"Search parameters",@32:@"Parameters",@34:@"Parameter value",@35:@"Boolean value",@40:@"Search items",@41:@"Item",@42:@"Quantity",@44:@"Inventory",@50:@"Drop chance multiplier",@51:@"Rarity",@54:@"RNG eliminator",@55:@"Forced stars"};
+  NSDictionary *names=@{@10:@"Game folder",@20:@"Save file path",@30:@"Parameter section",@31:@"Search parameters",@32:@"Parameters",@34:@"Parameter value",@35:@"Boolean value",@40:@"Search items",@41:@"Item",@42:@"Quantity",@44:@"Inventory",@50:@"Drop chance multiplier",@51:@"Rarity",@54:@"RNG eliminator",@55:@"Forced stars",@59:@"Max level cap"};
   [control setAccessibilityLabel:names[@(ident)] ?: S(text)];
   [(page<0?root:pages[page]) addSubview:view];
  }
@@ -84,8 +85,8 @@ void nativeOptions(int ident,char *json){
  else{[c removeAllItems];[c addItemsWithTitles:items];}}
  changing=NO;
 }
-int nativeSelection(int ident){id c=controls[@(ident)];if([c isKindOfClass:[NSTableView class]])return (int)[c selectedRow];return (int)[c indexOfSelectedItem];}
-void nativeSelect(int ident,int index){changing=YES;id c=controls[@(ident)];if([c isKindOfClass:[NSTableView class]]){if(index>=0&&index<[c numberOfRows]){[c selectRowIndexes:[NSIndexSet indexSetWithIndex:index] byExtendingSelection:NO];[c scrollRowToVisible:index];}else{[c deselectAll:nil];}}else{if(index>=0&&index<[c numberOfItems])[c selectItemAtIndex:index];else[c selectItem:nil];}changing=NO;}
+int nativeSelection(int ident){id c=controls[@(ident)];if([c isKindOfClass:[NSButton class]]&&![c isKindOfClass:[NSPopUpButton class]])return [c state]==NSControlStateValueOn;if([c isKindOfClass:[NSTableView class]])return (int)[c selectedRow];return (int)[c indexOfSelectedItem];}
+void nativeSelect(int ident,int index){changing=YES;id c=controls[@(ident)];if([c isKindOfClass:[NSButton class]]&&![c isKindOfClass:[NSPopUpButton class]]){[c setState:index==1?NSControlStateValueOn:NSControlStateValueOff];changing=NO;return;}if([c isKindOfClass:[NSTableView class]]){if(index>=0&&index<[c numberOfRows]){[c selectRowIndexes:[NSIndexSet indexSetWithIndex:index] byExtendingSelection:NO];[c scrollRowToVisible:index];}else{[c deselectAll:nil];}}else{if(index>=0&&index<[c numberOfItems])[c selectItemAtIndex:index];else[c selectItem:nil];}changing=NO;}
 void nativeEnable(int ident,int enabled){[controls[@(ident)] setEnabled:enabled!=0];}
 void nativeShow(int ident,int visible){[controls[@(ident)] setHidden:visible==0];}
 char *nativePick(int folder){@autoreleasepool{NSOpenPanel *p=[NSOpenPanel openPanel];p.title=folder?@"Select game folder":@"Open Dimraeth save";p.prompt=folder?@"Select":@"Open";p.canChooseFiles=!folder;p.canChooseDirectories=folder;p.allowsMultipleSelection=NO;if([p runModal]==NSModalResponseOK)return strdup(p.URL.path.UTF8String);return strdup("");}}

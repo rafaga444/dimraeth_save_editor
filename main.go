@@ -9,40 +9,44 @@ import (
 )
 
 const (
-	quitID        = 1
-	gamePathID    = 10
-	browseGameID  = 11
-	loadGameID    = 12
-	catalogInfoID = 13
-	savePathID    = 20
-	browseSaveID  = 21
-	loadSaveID    = 22
-	backupID      = 23
-	saveID        = 24
-	saveInfoID    = 25
-	syncXPID      = 26
-	groupID       = 30
-	searchID      = 31
-	fieldsID      = 32
-	fieldPathID   = 33
-	valueID       = 34
-	boolID        = 35
-	applyID       = 36
-	fieldInfoID   = 37
-	countID       = 38
-	itemSearchID  = 40
-	itemID        = 41
-	quantityID    = 42
-	addID         = 43
-	inventoryID   = 44
-	slotsID       = 45
-	multiplierID  = 50
-	rarityID      = 51
-	patchID       = 52
-	dllInfoID     = 53
-	rngModeID     = 54
-	starsID       = 55
-	statusID      = 60
+	quitID                = 1
+	gamePathID            = 10
+	browseGameID          = 11
+	loadGameID            = 12
+	catalogInfoID         = 13
+	savePathID            = 20
+	browseSaveID          = 21
+	loadSaveID            = 22
+	backupID              = 23
+	saveID                = 24
+	saveInfoID            = 25
+	syncXPID              = 26
+	groupID               = 30
+	searchID              = 31
+	fieldsID              = 32
+	fieldPathID           = 33
+	valueID               = 34
+	boolID                = 35
+	applyID               = 36
+	fieldInfoID           = 37
+	countID               = 38
+	itemSearchID          = 40
+	itemID                = 41
+	quantityID            = 42
+	addID                 = 43
+	inventoryID           = 44
+	slotsID               = 45
+	multiplierID          = 50
+	rarityID              = 51
+	patchID               = 52
+	dllInfoID             = 53
+	rngModeID             = 54
+	starsID               = 55
+	editableAttributesID  = 56
+	noAttributeCapID      = 57
+	editableSkillPointsID = 58
+	maxLevelID            = 59
+	statusID              = 60
 )
 
 type desktopUI interface {
@@ -63,15 +67,17 @@ type desktopUI interface {
 }
 
 type desktopApp struct {
-	ui                       desktopUI
-	save                     *Save
-	catalog                  *Catalog
-	allFields, visibleFields []Field
-	groups                   []string
-	matchingItems            []Item
-	inventoryPaths           [][]string
-	selected                 *Field
-	dirty, updating          bool
+	ui                        desktopUI
+	save                      *Save
+	catalog                   *Catalog
+	allFields, visibleFields  []Field
+	groups                    []string
+	matchingItems             []Item
+	inventoryPaths            [][]string
+	selected                  *Field
+	dirty, updating           bool
+	patchReady                bool
+	requestEditableAttributes bool
 }
 
 var desktop *desktopApp
@@ -124,8 +130,8 @@ func (a *desktopApp) build() {
 	u.add("button", addID, 0, 905, 505, 170, 30, "Add item")
 	u.add("list", inventoryID, 0, 15, 548, 1060, 99, "")
 	u.add("label", slotsID, 0, 15, 654, 1060, 25, "Select an inventory row to edit its quantity. New items use empty slots.")
-	u.add("heading", 110, 1, 22, 20, 800, 30, "Loot settings")
-	u.add("label", 111, 1, 22, 67, 1020, 54, "Set the drop chance multiplier and force a rarity for generated runes and equipment.")
+	u.add("heading", 110, 1, 22, 20, 800, 30, "Patch settings")
+	u.add("label", 111, 1, 22, 67, 1020, 54, "Configure loot and character progression in GameAssembly.dll.")
 	u.add("label", 112, 1, 22, 138, 440, 25, "Drop chance multiplier")
 	u.add("entry", multiplierID, 1, 22, 174, 400, 32, "3")
 	u.add("label", 113, 1, 470, 138, 520, 25, "Rune and equipment rarity")
@@ -140,11 +146,16 @@ func (a *desktopApp) build() {
 	u.add("combo", starsID, 1, 470, 262, 500, 32, "")
 	u.options(starsID, []string{"1★ — requires level 1", "2★ — requires level 5", "3★ — requires level 10", "4★ — requires level 15", "5★ — requires level 20", "6★ — requires level 25", "7★ — requires level 30", "8★ — requires level 35", "9★ — requires level 40"})
 	u.selectIndex(starsID, 5)
-	u.add("label", 118, 1, 22, 320, 1020, 52, "Star requirements: 1★ → lvl 1   |   2★ → 5   |   3★ → 10   |   4★ → 15   |   5★ → 20\n6★ → 25   |   7★ → 30   |   8★ → 35   |   9★ → 40")
-	u.add("label", 119, 1, 22, 380, 1020, 56, "6★ matches the current level-25 cap. Higher stars require higher levels; this patch does not raise the cap.\nRNG eliminator guarantees configured item and equipment drops. Slots, sets and affixes remain random.")
+	u.add("heading", 120, 1, 22, 305, 700, 25, "Progression")
+	u.add("toggle", editableAttributesID, 1, 22, 342, 700, 28, "Editable attributes (disables XP/attribute validation)")
+	u.add("toggle", noAttributeCapID, 1, 22, 380, 700, 28, "No attribute cap")
+	u.add("toggle", editableSkillPointsID, 1, 22, 418, 700, 28, "Editable skill points")
+	u.add("label", 121, 1, 760, 310, 260, 25, "Max level cap")
+	u.add("entry", maxLevelID, 1, 760, 342, 210, 32, "25")
+	u.add("label", 122, 1, 760, 390, 260, 48, "25–127; 25 restores the original cap.")
 	u.add("label", dllInfoID, 1, 22, 454, 1020, 48, "Select the game folder first.")
 	u.add("button", patchID, 1, 22, 520, 210, 36, "Save")
-	u.add("label", 114, 1, 22, 574, 1020, 72, "Close the game before saving. A backup is created before GameAssembly.dll is replaced.\nDisable restores the original RNG rolls and star selection, keeping your multiplier and rarity.\nUnknown patch instructions are rejected before any changes are written.")
+	u.add("label", 114, 1, 22, 574, 1020, 72, "Close the game before saving. A backup is created before GameAssembly.dll is replaced.\nTurning a progression toggle off restores its original instructions.\nUnknown patch instructions are rejected before any changes are written.")
 	u.add("label", statusID, -1, 20, 845, 1090, 42, "Ready. All file operations run inside this application.")
 	u.show(boolID, false)
 	a.refreshEnabled()
@@ -158,7 +169,7 @@ func (a *desktopApp) refreshEnabled() {
 	u.enable(valueID, a.selected != nil && a.selected.Type != "null")
 	u.enable(boolID, a.selected != nil)
 	u.enable(addID, a.save != nil && len(a.matchingItems) > 0)
-	u.enable(patchID, a.catalog != nil)
+	u.enable(patchID, a.catalog != nil && a.patchReady)
 	u.enable(starsID, a.ui.selection(rngModeID) == rngEnable)
 }
 func (a *desktopApp) status(s string) { a.ui.setText(statusID, s) }
@@ -189,6 +200,9 @@ func (a *desktopApp) commit() error {
 	doc, e := applyEdits(a.save.doc, []Edit{{Path: a.selected.Path, Value: value}})
 	if e != nil {
 		return e
+	}
+	if isAttributePath(a.selected.Path) {
+		a.ensureEditableAttributes()
 	}
 	a.save.doc = doc
 	a.dirty = true
@@ -383,13 +397,18 @@ func (a *desktopApp) event(id int) {
 		}
 		a.catalog = c
 		a.ui.setText(catalogInfoID, fmt.Sprintf("%d items  •  Metadata v%d  •  Assembly-CSharp DLL verified", len(c.Items), c.Version))
-		a.ui.setText(dllInfoID, c.DLL)
+		patchError := a.loadPatchSettings(c.DLL)
 		a.filterItems()
 		if a.save != nil {
 			a.refreshInventory()
 		}
 		a.refreshEnabled()
-		a.status("Item catalog loaded.")
+		if patchError != nil {
+			a.ui.setText(dllInfoID, "Patching unavailable: "+patchError.Error())
+			a.status("Item catalog loaded. Patching unavailable for this DLL.")
+		} else {
+			a.status("Item catalog and patch settings loaded.")
+		}
 	case browseSaveID:
 		if p := a.ui.pick(false); p != "" {
 			a.ui.setText(savePathID, p)
@@ -472,7 +491,11 @@ func (a *desktopApp) event(id int) {
 		}
 		a.dirty = false
 		a.refreshSave()
-		a.status("Save file encrypted and written. Backup: " + b)
+		message := "Save file encrypted and written. Backup: " + b
+		if a.requestEditableAttributes {
+			message += "  Apply Editable attributes using Save in Patcher before loading the game."
+		}
+		a.status(message)
 	case backupID:
 		if a.save == nil {
 			return
@@ -523,7 +546,12 @@ func (a *desktopApp) event(id int) {
 			a.fail(e)
 			return
 		}
-		doc, e := synchronizeProgression(a.save.doc)
+		cap, e := a.maxLevelCap()
+		if e != nil {
+			a.fail(e)
+			return
+		}
+		doc, e := synchronizeProgressionAtCap(a.save.doc, cap)
 		if e != nil {
 			a.fail(e)
 			return
@@ -540,10 +568,12 @@ func (a *desktopApp) event(id int) {
 			}
 		}
 		a.status("Level, level progress and all-time XP synchronized. Spendable XP and attributes are unchanged. Click Save to write.")
+	case editableAttributesID:
+		a.requestEditableAttributes = a.ui.selection(editableAttributesID) == 1
 	case rngModeID:
 		a.refreshEnabled()
 	case patchID:
-		if a.catalog == nil {
+		if a.catalog == nil || !a.patchReady {
 			return
 		}
 		m, e := strconv.ParseFloat(strings.TrimSpace(a.ui.text(multiplierID)), 64)
@@ -551,12 +581,24 @@ func (a *desktopApp) event(id int) {
 			a.fail(fmt.Errorf("Multiplier must be a positive number"))
 			return
 		}
-		a.status("Checking and patching GameAssembly.dll…")
-		b, e := patchLootFile(a.catalog.DLL, m, a.ui.selection(rarityID), a.ui.selection(rngModeID), a.ui.selection(starsID)+1)
+		cap, e := a.maxLevelCap()
 		if e != nil {
 			a.fail(e)
 			return
 		}
+		settings := progressionSettings{
+			EditableAttributes:  a.ui.selection(editableAttributesID) == 1,
+			NoAttributeCap:      a.ui.selection(noAttributeCapID) == 1,
+			EditableSkillPoints: a.ui.selection(editableSkillPointsID) == 1,
+			MaxLevel:            cap,
+		}
+		a.status("Checking and patching GameAssembly.dll…")
+		b, e := patchGameFile(a.catalog.DLL, m, a.ui.selection(rarityID), a.ui.selection(rngModeID), a.ui.selection(starsID)+1, settings)
+		if e != nil {
+			a.fail(e)
+			return
+		}
+		a.requestEditableAttributes = false
 		a.status("Patch applied. Backup: " + b)
 	}
 }

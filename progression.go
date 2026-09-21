@@ -36,6 +36,13 @@ func progressionInt(p map[string]any, key string) (int64, error) {
 }
 
 func synchronizeProgression(doc map[string]any) (map[string]any, error) {
+	return synchronizeProgressionAtCap(doc, 25)
+}
+
+func synchronizeProgressionAtCap(doc map[string]any, cap int) (map[string]any, error) {
+	if cap < 25 || cap > 127 {
+		return nil, fmt.Errorf("Max level cap must be from 25 to 127")
+	}
 	out, e := applyEdits(doc, nil)
 	if e != nil {
 		return nil, e
@@ -45,14 +52,14 @@ func synchronizeProgression(doc map[string]any) (map[string]any, error) {
 	if e != nil {
 		return nil, e
 	}
-	if level < 1 || level > 25 {
-		return nil, fmt.Errorf("Choose a level from 1 to 25 before synchronization. Editing a save does not remove the game's level cap")
+	if level < 1 || level > int64(cap) {
+		return nil, fmt.Errorf("Choose a level from 1 to %d before synchronization, or increase Max level cap in Patcher and apply it with Save", cap)
 	}
 	progress, e := progressionInt(p, "characterAccumulatedXP")
 	if e != nil {
 		return nil, e
 	}
-	if level < 25 && progress >= xpRequiredForLevel(level) {
+	if level < int64(cap) && progress >= xpRequiredForLevel(level) {
 		return nil, fmt.Errorf("XP toward next level must be below %d at level %d. Adjust characterAccumulatedXP or characterLevel first", xpRequiredForLevel(level), level)
 	}
 	if _, e = progressionInt(p, "characterAllTimeXP"); e != nil {
@@ -70,7 +77,7 @@ func synchronizeProgression(doc map[string]any) (map[string]any, error) {
 		return nil, fmt.Errorf("Total XP would exceed the game's 32-bit integer limit")
 	}
 	p["characterAllTimeXP"] = json.Number(strconv.FormatInt(total, 10))
-	p["characterHighestLevel"] = json.Number(strconv.FormatInt(min(25, max(highest, level)), 10))
+	p["characterHighestLevel"] = json.Number(strconv.FormatInt(min(int64(cap), max(highest, level)), 10))
 	return out, nil
 }
 
@@ -78,14 +85,14 @@ func fieldHelp(f Field) string {
 	path := strings.Join(f.Path, ".")
 	switch path {
 	case "playerData.characterLevel", "playerData.characterHighestLevel":
-		return "The supported game uses a level-25 cap. After editing level or its progress, click Synchronize level / XP, then Save."
+		return "For levels above 25, set Max level cap in Patcher and click Save there. Synchronize level / XP uses that cap to reconcile progression fields."
 	case "playerData.characterXP":
-		return "Spendable XP is separate from level progress and all-time XP. Raising this alone does not justify higher attributes."
+		return "Spendable XP is separate from level progress and all-time XP. Editable attributes in Patcher disables XP/attribute validation."
 	case "playerData.characterAccumulatedXP", "playerData.characterAllTimeXP":
 		return "All-time XP must equal prior level costs plus XP toward the next level. Synchronize level / XP recalculates all-time XP from your level and progress."
 	}
-	if strings.HasPrefix(path, "playerData.characterAttributes.") {
-		return "The game resets attributes whose upgrade cost exceeds all-time XP. Costs depend on race and class. XP synchronization does not bypass this check."
+	if isAttributePath(f.Path) {
+		return "Editable attributes in Patcher disables XP/attribute validation. No attribute cap removes the upgrade limit of 99. Click Save in Patcher to apply toggles."
 	}
 	return "Type: " + f.Type + "\nChanges stay in memory until you click Save."
 }

@@ -120,7 +120,7 @@ func windowProc(h uintptr, m uint32, wp, lp uintptr) uintptr {
 			if !win.changing {
 				id, code := int(wp&0xffff), int(wp>>16)
 				kind := win.kinds[id]
-				if (kind == "button" && code == 0) || ((kind == "combo" || kind == "list") && code == 1) || (kind == "entry" && code == 0x300) {
+				if ((kind == "button" || kind == "toggle") && code == 0) || ((kind == "combo" || kind == "list") && code == 1) || (kind == "entry" && code == 0x300) {
 					desktop.event(id)
 				}
 			}
@@ -184,7 +184,7 @@ func (w *windowsUI) init() {
 	width, height2 := int(rect.Right-rect.Left), int(rect.Bottom-rect.Top)
 	user32.NewProc("SetWindowPos").Call(w.root, 0, uintptr((int(sw)-width)/2), uintptr((int(sh)-height2)/2), uintptr(width), uintptr(height2), 0x14)
 	w.tabs = w.create("SysTabControl32", "", 0x50010000|0x04000000, 0, w.root, 200, 15, 112, 1100, 721)
-	for i, title := range []string{"Save editor", "Loot patcher"} {
+	for i, title := range []string{"Save editor", "Patcher"} {
 		item := tabItem{Mask: 1, Text: wide(title)}
 		msg(w.tabs, 0x133e, uintptr(i), uintptr(unsafe.Pointer(&item)))
 		w.pages[i] = w.create("DimraethNativeWindow", "", 0x40000000|0x04000000|0x02000000, 0x10000, w.root, 210+i, 20, 145, 1090, 686)
@@ -203,6 +203,9 @@ func (w *windowsUI) add(kind string, id, page, x, y, width, height int, text str
 	case "button":
 		class = "BUTTON"
 		style |= 0x10000
+	case "toggle":
+		class = "BUTTON"
+		style |= 0x10000 | 3 // BS_AUTOCHECKBOX
 	case "entry":
 		class = "EDIT"
 		style |= 0x10000 | 0x80
@@ -260,6 +263,9 @@ func (w *windowsUI) options(id int, items []string) {
 	user32.NewProc("InvalidateRect").Call(h, 0, 1)
 }
 func (w *windowsUI) selection(id int) int {
+	if w.kinds[id] == "toggle" {
+		return int(msg(w.controls[id], 0xf0, 0, 0))
+	}
 	code := uint32(0x147)
 	if w.kinds[id] == "list" {
 		code = 0x188
@@ -267,6 +273,10 @@ func (w *windowsUI) selection(id int) int {
 	return int(int32(msg(w.controls[id], code, 0, 0)))
 }
 func (w *windowsUI) selectIndex(id, index int) {
+	if w.kinds[id] == "toggle" {
+		msg(w.controls[id], 0xf1, uintptr(index), 0)
+		return
+	}
 	code := uint32(0x14e)
 	if w.kinds[id] == "list" {
 		code = 0x186

@@ -55,3 +55,18 @@ func TestProgressionRequiresKnownFields(t *testing.T) {
 		t.Fatal("unknown save schema accepted")
 	}
 }
+
+func TestSynchronizeRaisedCap(t *testing.T) {
+	doc, _ := decodeJSON([]byte(`{"playerData":{"characterLevel":60,"characterHighestLevel":25,"characterAccumulatedXP":0,"characterAllTimeXP":0}}`))
+	out, e := synchronizeProgressionAtCap(doc, 60)
+	if e != nil {
+		t.Fatal(e)
+	}
+	p := out["playerData"].(map[string]any)
+	if number(p["characterHighestLevel"]) != 60 || number(p["characterAllTimeXP"]) <= 0 {
+		t.Fatal("raised cap ignored", p)
+	}
+	if _, e := synchronizeProgressionAtCap(doc, 59); e == nil {
+		t.Fatal("level above selected cap accepted")
+	}
+}
