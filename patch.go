@@ -30,7 +30,7 @@ var originals = [][]byte{
 var rngPatches = []instructionPatch{
 	instruction(0xBC9C90, "443bf07dab", "85c07eac90"),
 	instruction(0xBCA224, "33d24533c00f28c6e84f825700", "31c00f57c00f2ff00f97c09090"),
-	instruction(0x104E4D0, "405553488d6c24d8", "31c0c39090909090"),
+	returnPatch(0x104E4D0, "405553488d6c24d8", "31c0c3"),
 }
 var starPatch = instruction(0x10BCCC4, "e8771afa00", "e8771afa00")
 

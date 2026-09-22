@@ -26,21 +26,34 @@ func instruction(offset int, originalHex, prefixHex string) instructionPatch {
 		panic(e)
 	}
 	prefix, e := hex.DecodeString(prefixHex)
-	if e != nil || len(prefix) > len(original) {
-		panic("Invalid patch definition")
+	if e != nil {
+		panic(fmt.Sprintf("Invalid patch encoding at 0x%X: %v", offset, e))
+	}
+	if len(prefix) > len(original) {
+		panic(fmt.Sprintf("Invalid patch at 0x%X: replacement is %d bytes, original is %d", offset, len(prefix), len(original)))
 	}
 	patched := bytes.Clone(original)
 	copy(patched, prefix)
 	return instructionPatch{offset, original, patched}
 }
 
+// Size NOP padding from the original instruction window instead of manually
+// counting padding bytes in each early-return patch.
+func returnPatch(offset int, originalHex, returnHex string) instructionPatch {
+	p := instruction(offset, originalHex, returnHex)
+	for i := len(returnHex) / 2; i < len(p.patched); i++ {
+		p.patched[i] = 0x90
+	}
+	return p
+}
+
 // Exact instruction windows from patch_dimraeth_diag_v13.py.
 // Early returns include the NOP padding used by that script.
 var editableAttributePatches = []instructionPatch{
-	instruction(0x933D60, "4053555657415648", "c390909090909090"),
-	instruction(0x933690, "48894c2408535657", "c390909090909090"),
-	instruction(0x934770, "48894c2408535657", "b001c39090909090"),
-	instruction(0x935900, "48894c2408535657", "b001c39090909090"),
+	returnPatch(0x933D60, "4053555657415648", "c3"),
+	returnPatch(0x933690, "48894c2408535657", "c3"),
+	returnPatch(0x934770, "48894c2408535657", "b001c3"),
+	returnPatch(0x935900, "48894c2408535657", "b001c3"),
 }
 var noAttributeCapPatches = []instructionPatch{
 	instruction(0x9BE73F, "83f8630f8dd8feffff", "83f863909090909090"),
@@ -49,7 +62,7 @@ var noAttributeCapPatches = []instructionPatch{
 	instruction(0xA2DF69, "83f8630f8dfc040000", "83f863909090909090"),
 }
 var editableSkillPointPatches = []instructionPatch{
-	instruction(0x932C10, "40534883ec20488bd9413bd07e420f57", "31c0c39090909090909090909090909090"),
+	returnPatch(0x932C10, "40534883ec20488bd9413bd07e420f57", "31c0c3"),
 	instruction(0xA08D06, "0f8499020000", "0f8e99020000"),
 }
 var levelCapPatches = []instructionPatch{
