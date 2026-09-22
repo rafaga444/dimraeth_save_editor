@@ -34,29 +34,28 @@ func instruction(offset int, originalHex, prefixHex string) instructionPatch {
 	return instructionPatch{offset, original, patched}
 }
 
-// Full instruction windows from the supplied Python patchers are validated,
-// including the unchanged suffix of functions replaced with an early return.
+// Exact instruction windows from patch_dimraeth_diag_v13.py.
+// Early returns include the NOP padding used by that script.
 var editableAttributePatches = []instructionPatch{
-	instruction(0x933040, "4053555657415648", "c3"),
-	instruction(0x932970, "48894c2408535657", "c3"),
-	instruction(0x933A50, "48894c2408535657", "b001c3"),
-	instruction(0x934BD0, "48894c2408535657", "b001c3"),
+	instruction(0x933D60, "4053555657415648", "c390909090909090"),
+	instruction(0x933690, "48894c2408535657", "c390909090909090"),
+	instruction(0x934770, "48894c2408535657", "b001c39090909090"),
+	instruction(0x935900, "48894c2408535657", "b001c39090909090"),
 }
 var noAttributeCapPatches = []instructionPatch{
-	instruction(0x9BD70F, "83f8630f8dd8feffff", "83f863909090909090"),
-	instruction(0x9C15E1, "83f8630f8d0a010000", "83f863909090909090"),
-	instruction(0xA209D6, "83f8630f8d74040000", "83f863909090909090"),
-	instruction(0xA2CBC9, "83f8630f8dfc040000", "83f863909090909090"),
+	instruction(0x9BE73F, "83f8630f8dd8feffff", "83f863909090909090"),
+	instruction(0x9C2611, "83f8630f8d0a010000", "83f863909090909090"),
+	instruction(0xA21D76, "83f8630f8d74040000", "83f863909090909090"),
+	instruction(0xA2DF69, "83f8630f8dfc040000", "83f863909090909090"),
 }
 var editableSkillPointPatches = []instructionPatch{
-	instruction(0x931EF0, "40534883ec20488bd9413bd07e420f57", "31c0c3"),
-	instruction(0xA07CDA, "0f84ba020000", "0f8eba020000"),
+	instruction(0x932C10, "40534883ec20488bd9413bd07e420f57", "31c0c39090909090909090909090909090"),
+	instruction(0xA08D06, "0f8499020000", "0f8e99020000"),
 }
 var levelCapPatches = []instructionPatch{
-	instruction(0x114B32B, "83f819", "83f819"),
-	instruction(0x114B361, "83fb19", "83fb19"),
-	instruction(0x114B368, "b919000000", "b919000000"),
-	instruction(0x92B0AD, "ba19000000", "ba19000000"),
+	instruction(0x1149991, "83fb19", "83fb19"),
+	instruction(0x1149998, "b919000000", "b919000000"),
+	instruction(0x92BEDD, "ba19000000", "ba19000000"),
 }
 
 func (p instructionPatch) window(data []byte) ([]byte, error) {
@@ -116,7 +115,7 @@ func readProgressionSettings(data []byte) (progressionSettings, error) {
 			return s, fmt.Errorf("Unsupported level-cap instructions at 0x%X. No changes were written", p.offset)
 		}
 		if i > 0 && s.MaxLevel != cap {
-			return s, fmt.Errorf("The four level-cap patches disagree. Restore a consistent DLL backup before patching")
+			return s, fmt.Errorf("The level-cap patches disagree. Restore a consistent DLL backup before patching")
 		}
 		s.MaxLevel = cap
 	}
@@ -137,7 +136,7 @@ func patchedGameDLL(data []byte, multiplier float64, rarity, mode, stars int, s 
 	if s.MaxLevel < 25 || s.MaxLevel > 127 {
 		return nil, fmt.Errorf("Max level cap must be an integer from 25 to 127 (25 restores the original cap)")
 	}
-	if _, e := readProgressionSettings(data); e != nil {
+	if e := validateSupportedV13(data); e != nil {
 		return nil, e
 	}
 	out, e := patchedLootDLL(data, multiplier, rarity, mode, stars)

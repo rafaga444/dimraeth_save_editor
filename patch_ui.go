@@ -33,7 +33,14 @@ func (a *desktopApp) loadPatchSettings(path string) error {
 	if e != nil {
 		return e
 	}
+	if e := validateSupportedV13(data); e != nil {
+		return e
+	}
 	s, e := readProgressionSettings(data)
+	if e != nil {
+		return e
+	}
+	loot, e := readLootSettings(data)
 	if e != nil {
 		return e
 	}
@@ -54,6 +61,10 @@ func (a *desktopApp) loadPatchSettings(path string) error {
 		}
 		a.ui.selectIndex(setting.id, value)
 	}
+	a.ui.setText(multiplierID, strconv.FormatFloat(loot.Multiplier, 'g', -1, 64))
+	a.ui.selectIndex(rarityID, loot.Rarity)
+	a.ui.selectIndex(rngModeID, loot.Mode)
+	a.ui.selectIndex(starsID, min(loot.Stars, 3)-1)
 	a.ui.setText(maxLevelID, strconv.Itoa(s.MaxLevel))
 	a.ui.setText(dllInfoID, path)
 	a.patchReady = true
