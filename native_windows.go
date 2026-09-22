@@ -36,16 +36,6 @@ type winMsg struct {
 	Private        uint32
 }
 type winRect struct{ Left, Top, Right, Bottom int32 }
-type notifyHeader struct {
-	From, ID uintptr
-	Code     uint32
-}
-type tabItem struct {
-	Mask, State, StateMask uint32
-	Text                   *uint16
-	TextMax, Image         int32
-	Param                  uintptr
-}
 type openFileName struct {
 	Size                         uint32
 	Owner, Instance              uintptr
@@ -71,16 +61,20 @@ type browseInfo struct {
 	Image                           int32
 }
 type windowsUI struct {
-	root, tabs, font, instance uintptr
-	pages                      [2]uintptr
-	controls                   map[int]uintptr
-	kinds                      map[int]string
-	changing                   bool
-	scale                      float64
+	root, font, instance                              uintptr
+	boldFont, backgroundBrush, panelBrush, fieldBrush uintptr
+	tabButtons                                        [2]uintptr
+	activePage                                        int
+	rows                                              map[int][]string
+	pages                                             [2]uintptr
+	controls                                          map[int]uintptr
+	kinds                                             map[int]string
+	changing                                          bool
+	scale                                             float64
 }
 
 func newDesktopUI() desktopUI {
-	win = &windowsUI{controls: map[int]uintptr{}, kinds: map[int]string{}, scale: 1}
+	win = &windowsUI{controls: map[int]uintptr{}, kinds: map[int]string{}, rows: map[int][]string{}, scale: 1}
 	return win
 }
 func wide(s string) *uint16 {
@@ -105,6 +99,9 @@ func (w *windowsUI) create(class, title string, style, ex, parent uintptr, id, x
 }
 func windowProc(h uintptr, m uint32, wp, lp uintptr) uintptr {
 	if win != nil {
+		if result, handled := win.themeMessage(h, m, wp, lp); handled {
+			return result
+		}
 		switch m {
 		case 0x10:
 			if h == win.root {
@@ -119,21 +116,17 @@ func windowProc(h uintptr, m uint32, wp, lp uintptr) uintptr {
 		case 0x111:
 			if !win.changing {
 				id, code := int(wp&0xffff), int(wp>>16)
+				if (id == 200 || id == 201) && code == 0 {
+					win.selectPage(id - 200)
+					return 0
+				}
 				kind := win.kinds[id]
 				if ((kind == "button" || kind == "toggle") && code == 0) || ((kind == "combo" || kind == "list") && code == 1) || (kind == "entry" && code == 0x300) {
 					desktop.event(id)
 				}
 			}
 			return 0
-		case 0x4e:
-			if lp != 0 {
-				n := (*notifyHeader)(unsafe.Pointer(lp))
-				if n.From == win.tabs && int32(n.Code) == -551 {
-					index := int(msg(win.tabs, 0x130b, 0, 0))
-					win.selectPage(index)
-					return 0
-				}
-			}
+
 		}
 	}
 	r, _, _ := user32.NewProc("DefWindowProcW").Call(h, uintptr(m), wp, lp)
@@ -143,13 +136,13 @@ func (w *windowsUI) selectPage(index int) {
 	if index < 0 || index >= len(w.pages) {
 		return
 	}
+	w.activePage = index
 	for i, p := range w.pages {
 		if i != index {
 			user32.NewProc("ShowWindow").Call(p, 0)
 		}
 	}
-	// Pages are siblings of the tab control. ShowWindow alone leaves them
-	// underneath its opaque client area; explicitly raise the active page.
+	// Keep the active page above its sibling controls.
 	user32.NewProc("SetWindowPos").Call(w.pages[index], 0, 0, 0, 0, 0, 0x53) // TOP, NOMOVE | NOSIZE | NOACTIVATE | SHOWWINDOW
 	user32.NewProc("RedrawWindow").Call(w.root, 0, 0, 0x185)                 // INVALIDATE | ERASE | ALLCHILDREN | UPDATENOW
 }
@@ -170,8 +163,12 @@ func (w *windowsUI) init() {
 	}
 	height := int32(-14 * w.scale)
 	w.font, _, _ = gdi32.NewProc("CreateFontW").Call(uintptr(height), 0, 0, 0, 400, 0, 0, 0, 1, 0, 0, 5, 0, uintptr(unsafe.Pointer(wide("Segoe UI"))))
+	w.initTheme()
 	cursor, _, _ := user32.NewProc("LoadCursorW").Call(0, 32512)
-	c := winClass{Style: 3, Procedure: syscall.NewCallback(windowProc), Instance: w.instance, Cursor: cursor, Background: 16, Name: wide("DimraethNativeWindow")}
+	// rsrc assigns resource 1 to the manifest and resource 2 to the icon group.
+	icon, _, _ := user32.NewProc("LoadImageW").Call(w.instance, 2, 1, 0, 0, 0x8040) // IMAGE_ICON, LR_SHARED | LR_DEFAULTSIZE
+	smallIcon, _, _ := user32.NewProc("LoadImageW").Call(w.instance, 2, 1, 16, 16, 0x8000)
+	c := winClass{Style: 3, Procedure: syscall.NewCallback(windowProc), Instance: w.instance, Cursor: cursor, Background: w.backgroundBrush, Icon: icon, SmallIcon: smallIcon, Name: wide("DimraethNativeWindow")}
 	c.Size = uint32(unsafe.Sizeof(c))
 	r, _, e := user32.NewProc("RegisterClassExW").Call(uintptr(unsafe.Pointer(&c)))
 	if r == 0 {
@@ -179,14 +176,13 @@ func (w *windowsUI) init() {
 	}
 	style := uintptr(0x00c00000 | 0x00080000 | 0x00020000 | 0x02000000)
 	w.root = w.create("DimraethNativeWindow", "Dimraeth Editor", style, 0, 0, 0, 0, 0, 1130, 895)
+	w.darkTitleBar()
 	rect := winRect{Right: int32(w.px(1130)), Bottom: int32(w.px(895))}
 	user32.NewProc("AdjustWindowRectEx").Call(uintptr(unsafe.Pointer(&rect)), style, 0, 0)
 	width, height2 := int(rect.Right-rect.Left), int(rect.Bottom-rect.Top)
 	user32.NewProc("SetWindowPos").Call(w.root, 0, uintptr((int(sw)-width)/2), uintptr((int(sh)-height2)/2), uintptr(width), uintptr(height2), 0x14)
-	w.tabs = w.create("SysTabControl32", "", 0x50010000|0x04000000, 0, w.root, 200, 15, 112, 1100, 721)
 	for i, title := range []string{"Save editor", "Patcher"} {
-		item := tabItem{Mask: 1, Text: wide(title)}
-		msg(w.tabs, 0x133e, uintptr(i), uintptr(unsafe.Pointer(&item)))
+		w.tabButtons[i] = w.create("BUTTON", title, 0x5001000b, 0, w.root, 200+i, 470+i*100, 112, 100, 28)
 		w.pages[i] = w.create("DimraethNativeWindow", "", 0x40000000|0x04000000|0x02000000, 0x10000, w.root, 210+i, 20, 145, 1090, 686)
 	}
 	w.selectPage(0)
@@ -202,7 +198,7 @@ func (w *windowsUI) add(kind string, id, page, x, y, width, height int, text str
 	switch kind {
 	case "button":
 		class = "BUTTON"
-		style |= 0x10000
+		style |= 0x10000 | 0xb // BS_OWNERDRAW; native keyboard and click handling
 	case "toggle":
 		class = "BUTTON"
 		style |= 0x10000 | 3 // BS_AUTOCHECKBOX
@@ -212,17 +208,18 @@ func (w *windowsUI) add(kind string, id, page, x, y, width, height int, text str
 		ex = 0x200
 	case "combo":
 		class = "COMBOBOX"
-		style |= 0x10000 | 0x00200000 | 3
+		style |= 0x10000 | 0x00200000 | 3 | 0x10 | 0x200 // OWNERDRAWFIXED | HASSTRINGS
 		height = 300
 	case "list":
 		class = "LISTBOX"
-		style |= 0x10000 | 0x00200000 | 0x00100000 | 1 | 0x100 | 0x800
+		style |= 0x10000 | 0x00200000 | 0x00100000 | 1 | 0x100 | 0x800 | 0x10 | 0x40
 		ex = 0x200
 	case "label", "heading":
 		style |= 0x80
 	}
 	w.controls[id] = w.create(class, text, style, ex, parent, id, x, y, width, height)
 	w.kinds[id] = kind
+	w.styleControl(id, kind)
 }
 func (w *windowsUI) text(id int) string {
 	h := w.controls[id]
@@ -248,6 +245,7 @@ func (w *windowsUI) options(id int, items []string) {
 		reset, add = 0x184, 0x180
 	}
 	msg(h, 0xb, 0, 0)
+	w.rows[id] = append([]string(nil), items...)
 	msg(h, reset, 0, 0)
 	max := 0
 	for _, item := range items {
@@ -275,6 +273,7 @@ func (w *windowsUI) selection(id int) int {
 func (w *windowsUI) selectIndex(id, index int) {
 	if w.kinds[id] == "toggle" {
 		msg(w.controls[id], 0xf1, uintptr(index), 0)
+		user32.NewProc("InvalidateRect").Call(w.controls[id], 0, 1)
 		return
 	}
 	code := uint32(0x14e)
@@ -282,6 +281,7 @@ func (w *windowsUI) selectIndex(id, index int) {
 		code = 0x186
 	}
 	msg(w.controls[id], code, uintptr(index), 0)
+	user32.NewProc("InvalidateRect").Call(w.controls[id], 0, 1)
 }
 func (w *windowsUI) enable(id int, enabled bool) {
 	v := uintptr(0)
@@ -347,5 +347,8 @@ func (w *windowsUI) run() {
 		}
 	}
 	ole32.NewProc("CoUninitialize").Call()
+	for _, object := range []uintptr{w.font, w.boldFont, w.backgroundBrush, w.panelBrush, w.fieldBrush} {
+		gdi32.NewProc("DeleteObject").Call(object)
+	}
 }
 func (w *windowsUI) stop() { user32.NewProc("DestroyWindow").Call(w.root) }

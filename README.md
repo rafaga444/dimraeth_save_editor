@@ -58,3 +58,26 @@ Generated applications are written to `dist/`:
 The build helper signs macOS bundles locally and checks that each executable
 and complete `.app` bundle is no larger than 5,000,000 bytes. The build fails
 if this limit is exceeded.
+
+Application icons and the Windows resource file are included in the repository;
+normal builds do not require an image converter or Windows resource compiler.
+Launch the `.app` bundle on macOS to use its Dock and Finder icon.
+
+## Rebuild icons after replacing the source image
+
+This optional asset step requires Pillow. Normal application builds do not.
+
+```sh
+python3 -m pip install Pillow
+python3 assets/build_icons.py
+```
+
+## Rebuild Windows resources after replacing the icon or manifest
+
+```sh
+go run github.com/akavel/rsrc@v0.10.2 -arch amd64 -ico assets/app.ico -manifest assets/app.manifest -o resources_windows_amd64.syso
+```
+
+Commit the regenerated resource file together with its source assets. macOS
+bundles use `assets/app.icns`; Windows uses `assets/app.ico` embedded in the
+resource file. `assets/app-icon.png` is the source image for both icon formats.

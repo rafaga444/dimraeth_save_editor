@@ -39,6 +39,9 @@ for system, arch in targets:
         macos = app / 'Contents' / 'MacOS'
         macos.mkdir(parents=True, exist_ok=True)
         shutil.copy2(target, macos / 'dimraeth-editor')
+        resources = app / 'Contents' / 'Resources'
+        resources.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(root / 'assets' / 'app.icns', resources / 'app.icns')
         with (app / 'Contents' / 'Info.plist').open('wb') as f:
             plistlib.dump({
                 'CFBundleName': 'Dimraeth Editor',
@@ -47,6 +50,7 @@ for system, arch in targets:
                 'CFBundleVersion': '2',
                 'CFBundleShortVersionString': '2.0',
                 'CFBundleExecutable': 'dimraeth-editor',
+                'CFBundleIconFile': 'app.icns',
                 'CFBundlePackageType': 'APPL',
                 'CFBundleDevelopmentRegion': 'en',
                 'CFBundleLocalizations': ['en'],
