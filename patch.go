@@ -9,7 +9,7 @@ import (
 	"math"
 )
 
-const supportedV13SHA256 = "4129db654d1257c7e619e24490508297d5e6e66c26f059d978dc913eab7e70a5"
+const supportedV13SHA256 = "99bba4f31626fd2b863dc0a31c2cf3babf5b2270f8682439dbdb3d57d50c1dcc"
 
 const (
 	rngKeep = iota
@@ -17,25 +17,25 @@ const (
 	rngEnable
 )
 
-// v13 replaces the full array_get CALL with MOV EAX, imm32. Replacing
+// Diagnostic v13 for build 99bba4f3 replaces the full array_get CALL with MOV EAX, imm32. Replacing
 // only BL leaves stale high bits in the rarity passed to GenerateRuneData.
-var patchOffsets = []int{0xD26940, 0x10BCCB1}
+var patchOffsets = []int{0xD25DD0, 0x10BE2C1}
 var originals = [][]byte{
 	{0x48, 0x83, 0xec, 0x28, 0x33, 0xd2, 0xe8, 0x25, 0xf8, 0xff},
-	{0xe8, 0x8a, 0x1a, 0xfa, 0x00},
+	{0xe8, 0x0a, 0x48, 0xfa, 0x00},
 }
 
 // RNG eliminator combines --guaranteed-item, --guaranteed-equipment and
 // --gear-legality-bypass. The positive-chance checks remain intact.
 var rngPatches = []instructionPatch{
-	instruction(0xBC9C90, "443bf07dab", "85c07eac90"),
-	instruction(0xBCA224, "33d24533c00f28c6e84f825700", "31c00f57c00f2ff00f97c09090"),
-	returnPatch(0x104E4D0, "405553488d6c24d8", "31c0c3"),
+	instruction(0xBC79E0, "443bf07dab", "85c07eac90"),
+	instruction(0xBC7F74, "33d24533c00f28c6e8ff485600", "31c00f57c00f2ff00f97c09090"),
+	returnPatch(0x104FB20, "405553488d6c24d8", "31c0c3"),
 }
-var starPatch = instruction(0x10BCCC4, "e8771afa00", "e8771afa00")
+var starPatch = instruction(0x10BE2D4, "e8f747fa00", "e8f747fa00")
 
 // Keep these instruction lists available to the existing source fixtures.
-var rngOffsets = []int{0xBC9C90, 0xBCA224, 0x104E4D0, 0x10BCCC4}
+var rngOffsets = []int{rngPatches[0].offset, rngPatches[1].offset, rngPatches[2].offset, starPatch.offset}
 var rngOriginals = [][]byte{rngPatches[0].original, rngPatches[1].original, rngPatches[2].original, starPatch.original}
 
 type lootSettings struct {
@@ -108,7 +108,7 @@ func readLootSettings(data []byte) (lootSettings, error) {
 	return s, nil
 }
 
-// Validate the exact v13 build while allowing repeat edits of known patches.
+// Validate build 99bba4f3 while allowing repeat edits of known v13 patches.
 // Normalization happens in memory only; the DLL is untouched on rejection.
 func validateSupportedV13(data []byte) error {
 	if _, e := readProgressionSettings(data); e != nil {
@@ -125,7 +125,7 @@ func validateSupportedV13(data []byte) error {
 		copy(clean[o:], originals[i])
 	}
 	if fmt.Sprintf("%x", sha256.Sum256(clean)) != supportedV13SHA256 {
-		return fmt.Errorf("Unsupported GameAssembly.dll build. Restore the clean DLL supported by diagnostic patcher v13 (SHA-256 %s). No changes were written", supportedV13SHA256)
+		return fmt.Errorf("Unsupported GameAssembly.dll build. Restore the clean DLL supported by diagnostic patcher v13 for build 99bba4f3 (SHA-256 %s). No changes were written", supportedV13SHA256)
 	}
 	return nil
 }

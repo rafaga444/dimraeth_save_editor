@@ -1,3 +1,8 @@
+# Patch notes — September 24, 2026
+
+- Updated every patch offset and the supported DLL SHA-256 for build 99bba4f3.
+- Updated relative CALL instruction bytes for RuneDropCheck and ReturnRandomRuneData (rarity and stars).
+
 # Patch notes — September 22, 2026
 
 - Fixed a startup crash caused by oversized skill-point patch padding; return patches now pad to the original instruction length automatically.

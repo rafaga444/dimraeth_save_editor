@@ -47,28 +47,28 @@ func returnPatch(offset int, originalHex, returnHex string) instructionPatch {
 	return p
 }
 
-// Exact instruction windows from patch_dimraeth_diag_v13.py.
+// Exact instruction windows from patch_dimraeth_diag_v13_updated.py (build 99bba4f3).
 // Early returns include the NOP padding used by that script.
 var editableAttributePatches = []instructionPatch{
-	returnPatch(0x933D60, "4053555657415648", "c3"),
-	returnPatch(0x933690, "48894c2408535657", "c3"),
-	returnPatch(0x934770, "48894c2408535657", "b001c3"),
-	returnPatch(0x935900, "48894c2408535657", "b001c3"),
+	returnPatch(0x934330, "4053555657415648", "c3"),
+	returnPatch(0x933C60, "48894c2408535657", "c3"),
+	returnPatch(0x934D40, "48894c2408535657", "b001c3"),
+	returnPatch(0x935ED0, "48894c2408535657", "b001c3"),
 }
 var noAttributeCapPatches = []instructionPatch{
-	instruction(0x9BE73F, "83f8630f8dd8feffff", "83f863909090909090"),
-	instruction(0x9C2611, "83f8630f8d0a010000", "83f863909090909090"),
-	instruction(0xA21D76, "83f8630f8d74040000", "83f863909090909090"),
-	instruction(0xA2DF69, "83f8630f8dfc040000", "83f863909090909090"),
+	instruction(0x9BD3CF, "83f8630f8dd8feffff", "83f863909090909090"),
+	instruction(0x9C12A1, "83f8630f8d0a010000", "83f863909090909090"),
+	instruction(0xA20A06, "83f8630f8d74040000", "83f863909090909090"),
+	instruction(0xA2CBF9, "83f8630f8dfc040000", "83f863909090909090"),
 }
 var editableSkillPointPatches = []instructionPatch{
-	returnPatch(0x932C10, "40534883ec20488bd9413bd07e420f57", "31c0c3"),
-	instruction(0xA08D06, "0f8499020000", "0f8e99020000"),
+	returnPatch(0x9331E0, "40534883ec20488bd9413bd07e420f57", "31c0c3"),
+	instruction(0xA07996, "0f8499020000", "0f8e99020000"),
 }
 var levelCapPatches = []instructionPatch{
-	instruction(0x1149991, "83fb19", "83fb19"),
-	instruction(0x1149998, "b919000000", "b919000000"),
-	instruction(0x92BEDD, "ba19000000", "ba19000000"),
+	instruction(0x1168D81, "83fb19", "83fb19"),
+	instruction(0x1168D88, "b919000000", "b919000000"),
+	instruction(0x92C36D, "ba19000000", "ba19000000"),
 }
 
 func (p instructionPatch) window(data []byte) ([]byte, error) {
