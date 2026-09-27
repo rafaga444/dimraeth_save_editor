@@ -12,7 +12,7 @@ import (
 // precision Pow(level, 1.5) * 100 + 150, followed by ties-to-even rounding.
 // ValidateLoadedXPData requires all-time XP = prior level costs + accumulated XP.
 // Spendable XP is a separate balance and does not determine character level.
-// The Patcher tab implements the separate diagnostic v13 validation bypasses.
+// The Patcher tab implements the separate v14 AOB validation bypasses.
 // Attribute validation computes race/class upgrade costs from game assets and
 // calls ForceRespec if that budget exceeds earned XP (with a 5% tolerance).
 // This helper repairs the level/XP relation; it does not bypass that validation.

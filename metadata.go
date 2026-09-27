@@ -24,7 +24,11 @@ type Catalog struct {
 	Version  int    `json:"version"`
 	Methods  int    `json:"methods"`
 }
-type section struct{ va, size, off, raw uint32 }
+type section struct {
+	va, size, off, raw uint32
+	name               string
+	characteristics    uint32
+}
 type peImage struct {
 	base     uint64
 	sections []section
@@ -44,7 +48,11 @@ func parsePE(b []byte) (*peImage, error) {
 		return nil, bad
 	}
 	n := int(u(b[p+6:]))
-	start := p + 24 + int(u(b[p+20:]))
+	optionalSize := int(u(b[p+20:]))
+	if optionalSize < 112 {
+		return nil, bad
+	}
+	start := p + 24 + optionalSize
 	if n < 1 || n > 96 || start+n*40 > len(b) {
 		return nil, bad
 	}
@@ -52,9 +60,13 @@ func parsePE(b []byte) (*peImage, error) {
 	for i := 0; i < n; i++ {
 		o := start + i*40
 		get := func(j int) uint32 { return binary.LittleEndian.Uint32(b[o+j:]) }
-		s := section{get(12), get(8), get(20), get(16)}
+		s := section{va: get(12), size: get(8), off: get(20), raw: get(16), name: strings.TrimRight(string(b[o:o+8]), "\x00"), characteristics: get(36)}
 		if uint64(s.off)+uint64(s.raw) > uint64(len(b)) {
-			return nil, bad
+			// Match v14's handling of section-alignment padding beyond EOF.
+			if uint64(s.off) >= uint64(len(b)) {
+				continue
+			}
+			s.raw = uint32(len(b) - int(s.off))
 		}
 		pe.sections = append(pe.sections, s)
 	}

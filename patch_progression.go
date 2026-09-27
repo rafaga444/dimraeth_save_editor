@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
@@ -47,30 +46,6 @@ func returnPatch(offset int, originalHex, returnHex string) instructionPatch {
 	return p
 }
 
-// Exact instruction windows from patch_dimraeth_diag_v13_updated.py (build 99bba4f3).
-// Early returns include the NOP padding used by that script.
-var editableAttributePatches = []instructionPatch{
-	returnPatch(0x934330, "4053555657415648", "c3"),
-	returnPatch(0x933C60, "48894c2408535657", "c3"),
-	returnPatch(0x934D40, "48894c2408535657", "b001c3"),
-	returnPatch(0x935ED0, "48894c2408535657", "b001c3"),
-}
-var noAttributeCapPatches = []instructionPatch{
-	instruction(0x9BD3CF, "83f8630f8dd8feffff", "83f863909090909090"),
-	instruction(0x9C12A1, "83f8630f8d0a010000", "83f863909090909090"),
-	instruction(0xA20A06, "83f8630f8d74040000", "83f863909090909090"),
-	instruction(0xA2CBF9, "83f8630f8dfc040000", "83f863909090909090"),
-}
-var editableSkillPointPatches = []instructionPatch{
-	returnPatch(0x9331E0, "40534883ec20488bd9413bd07e420f57", "31c0c3"),
-	instruction(0xA07996, "0f8499020000", "0f8e99020000"),
-}
-var levelCapPatches = []instructionPatch{
-	instruction(0x1168D81, "83fb19", "83fb19"),
-	instruction(0x1168D88, "b919000000", "b919000000"),
-	instruction(0x92C36D, "ba19000000", "ba19000000"),
-}
-
 func (p instructionPatch) window(data []byte) ([]byte, error) {
 	if p.offset < 0 || p.offset > len(data)-len(p.original) {
 		return nil, fmt.Errorf("The DLL is too short for patch offset 0x%X", p.offset)
@@ -97,22 +72,22 @@ func readPatchGroup(data []byte, patches []instructionPatch) (bool, error) {
 	return enabled, nil
 }
 
-func readProgressionSettings(data []byte) (progressionSettings, error) {
+func (l *patchLayout) readProgressionSettings(data []byte) (progressionSettings, error) {
 	s := progressionSettings{}
 	if _, e := parsePE(data); e != nil {
 		return s, e
 	}
 	var e error
-	if s.EditableAttributes, e = readPatchGroup(data, editableAttributePatches); e != nil {
+	if s.EditableAttributes, e = readPatchGroup(data, l.editableAttributePatches); e != nil {
 		return s, e
 	}
-	if s.NoAttributeCap, e = readPatchGroup(data, noAttributeCapPatches); e != nil {
+	if s.NoAttributeCap, e = readPatchGroup(data, l.noAttributeCapPatches); e != nil {
 		return s, e
 	}
-	if s.EditableSkillPoints, e = readPatchGroup(data, editableSkillPointPatches); e != nil {
+	if s.EditableSkillPoints, e = readPatchGroup(data, l.editableSkillPointPatches); e != nil {
 		return s, e
 	}
-	for i, p := range levelCapPatches {
+	for i, p := range l.levelCapPatches {
 		actual, e := p.window(data)
 		if e != nil {
 			return s, e
@@ -145,21 +120,21 @@ func writePatchGroup(data []byte, patches []instructionPatch, enabled bool) {
 	}
 }
 
-func patchedGameDLL(data []byte, multiplier float64, rarity, mode, stars int, s progressionSettings) ([]byte, error) {
+func (l *patchLayout) patchedGameDLL(data []byte, multiplier float64, rarity, mode, stars int, s progressionSettings) ([]byte, error) {
 	if s.MaxLevel < 25 || s.MaxLevel > 127 {
 		return nil, fmt.Errorf("Max level cap must be an integer from 25 to 127 (25 restores the original cap)")
 	}
-	if e := validateSupportedV13(data); e != nil {
+	if e := l.validateCurrent(data); e != nil {
 		return nil, e
 	}
-	out, e := patchedLootDLL(data, multiplier, rarity, mode, stars)
+	out, e := l.patchedLootDLL(data, multiplier, rarity, mode, stars)
 	if e != nil {
 		return nil, e
 	}
-	writePatchGroup(out, editableAttributePatches, s.EditableAttributes)
-	writePatchGroup(out, noAttributeCapPatches, s.NoAttributeCap)
-	writePatchGroup(out, editableSkillPointPatches, s.EditableSkillPoints)
-	for _, p := range levelCapPatches {
+	writePatchGroup(out, l.editableAttributePatches, s.EditableAttributes)
+	writePatchGroup(out, l.noAttributeCapPatches, s.NoAttributeCap)
+	writePatchGroup(out, l.editableSkillPointPatches, s.EditableSkillPoints)
+	for _, p := range l.levelCapPatches {
 		if len(p.original) == 3 {
 			out[p.offset+2] = byte(s.MaxLevel)
 		} else {
@@ -167,20 +142,4 @@ func patchedGameDLL(data []byte, multiplier float64, rarity, mode, stars int, s 
 		}
 	}
 	return out, nil
-}
-
-func patchGameFile(path string, multiplier float64, rarity, mode, stars int, s progressionSettings) (string, error) {
-	data, e := readLimited(path, 512<<20)
-	if e != nil {
-		return "", e
-	}
-	out, e := patchedGameDLL(data, multiplier, rarity, mode, stars, s)
-	if e != nil {
-		return "", e
-	}
-	b, e := backup(path)
-	if e != nil {
-		return "", e
-	}
-	return b, replaceChecked(path, out, sha256.Sum256(data))
 }

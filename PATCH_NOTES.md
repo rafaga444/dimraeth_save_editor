@@ -1,3 +1,10 @@
+# Patch notes — September 27, 2026
+
+- Replaced fixed offsets and the build SHA whitelist with wildcard AOB signatures across all executable PE sections, including il2cpp.
+- Added Scan only to verify all 19 patch targets and display their sections and addresses without writing files.
+- Reject missing or ambiguous signatures, invalid target bytes, and overlapping patches before writing the DLL.
+- Preserve exact original CALL bytes in a clean backup for repeated edits and disabling patches; existing matching backups can be reused.
+
 # Patch notes — September 24, 2026
 
 - Updated every patch offset and the supported DLL SHA-256 for build 99bba4f3.

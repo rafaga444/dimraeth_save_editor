@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"path/filepath"
 	"runtime"
 	"sort"
 	"strconv"
@@ -47,6 +48,8 @@ const (
 	editableSkillPointsID = 58
 	maxLevelID            = 59
 	statusID              = 60
+	scanID                = 61
+	scanResultsID         = 62
 )
 
 type desktopUI interface {
@@ -131,7 +134,7 @@ func (a *desktopApp) build() {
 	u.add("list", inventoryID, 0, 15, 548, 1060, 99, "")
 	u.add("label", slotsID, 0, 15, 654, 1060, 25, "Select an inventory row to edit its quantity. New items use empty slots.")
 	u.add("heading", 110, 1, 22, 20, 800, 30, "Patch settings")
-	u.add("label", 111, 1, 22, 67, 1020, 54, "Configure loot and character progression in GameAssembly.dll.")
+	u.add("label", 111, 1, 22, 67, 1020, 54, "Configure loot and character progression in GameAssembly.dll. Close the game before saving.\nScan only verifies all 19 patch targets without writing files. Save creates a backup; turning a toggle off restores its original instructions.")
 	u.add("label", 112, 1, 22, 138, 440, 25, "Drop chance multiplier")
 	u.add("entry", multiplierID, 1, 22, 174, 400, 32, "3")
 	u.add("label", 113, 1, 470, 138, 520, 25, "Rune and equipment rarity")
@@ -155,7 +158,9 @@ func (a *desktopApp) build() {
 	u.add("label", 122, 1, 760, 390, 260, 48, "25–127; 25 restores the original cap.")
 	u.add("label", dllInfoID, 1, 22, 454, 1020, 48, "Select the game folder first.")
 	u.add("button", patchID, 1, 22, 520, 210, 36, "Save")
-	u.add("label", 114, 1, 22, 574, 1020, 72, "Close the game before saving. A backup is created before GameAssembly.dll is replaced.\nTurning a progression toggle off restores its original instructions.\nUnknown patch instructions are rejected before any changes are written.")
+	u.add("button", scanID, 1, 250, 520, 210, 36, "Scan only")
+	u.add("list", scanResultsID, 1, 22, 574, 1048, 99, "")
+	u.options(scanResultsID, []string{"Scan only checks the full v14 patch set and shows sections and addresses here."})
 	u.add("label", statusID, -1, 20, 845, 1090, 42, "Ready. All file operations run inside this application.")
 	u.show(boolID, false)
 	a.refreshEnabled()
@@ -389,6 +394,7 @@ func (a *desktopApp) event(id int) {
 			a.event(loadGameID)
 		}
 	case loadGameID:
+		a.ui.options(scanResultsID, []string{"Scan only checks the full v14 patch set and shows sections and addresses here."})
 		a.status("Reading game metadata and DLL…")
 		c, e := loadCatalog(strings.TrimSpace(a.ui.text(gamePathID)))
 		if e != nil {
@@ -572,6 +578,23 @@ func (a *desktopApp) event(id int) {
 		a.requestEditableAttributes = a.ui.selection(editableAttributesID) == 1
 	case rngModeID:
 		a.refreshEnabled()
+	case scanID:
+		folder := strings.TrimSpace(a.ui.text(gamePathID))
+		if folder == "" {
+			a.fail(fmt.Errorf("Select the game installation folder before scanning"))
+			return
+		}
+		path := filepath.Join(folder, "GameAssembly.dll")
+		a.status("Scanning executable PE sections for all 19 v14 patch targets…")
+		a.ui.options(scanResultsID, []string{"Scanning GameAssembly.dll…"})
+		rows, e := scanPatchFile(path)
+		if e != nil {
+			a.ui.options(scanResultsID, strings.Split(e.Error(), "\n"))
+			a.fail(e)
+			return
+		}
+		a.ui.options(scanResultsID, rows)
+		a.status("Scan complete: all 19 patch targets uniquely verified. No files were written.")
 	case patchID:
 		if a.catalog == nil || !a.patchReady {
 			return
@@ -599,6 +622,7 @@ func (a *desktopApp) event(id int) {
 			return
 		}
 		a.requestEditableAttributes = false
+		a.ui.options(scanResultsID, []string{"Patch applied. Click Scan only to verify the current DLL again."})
 		a.status("Patch applied. Backup: " + b)
 	}
 }

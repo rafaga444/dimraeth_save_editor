@@ -29,18 +29,15 @@ func (a *desktopApp) maxLevelCap() (int, error) {
 
 func (a *desktopApp) loadPatchSettings(path string) error {
 	a.patchReady = false
-	data, e := readLimited(path, 512<<20)
+	input, e := loadPatchInput(path)
 	if e != nil {
 		return e
 	}
-	if e := validateSupportedV13(data); e != nil {
-		return e
-	}
-	s, e := readProgressionSettings(data)
+	s, e := input.layout.readProgressionSettings(input.data)
 	if e != nil {
 		return e
 	}
-	loot, e := readLootSettings(data)
+	loot, e := input.layout.readLootSettings(input.data)
 	if e != nil {
 		return e
 	}
