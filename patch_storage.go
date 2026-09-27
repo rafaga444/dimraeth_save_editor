@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -31,6 +32,12 @@ func loadPatchInput(path string) (*patchInput, error) {
 	layout, scanErr := resolvePatchLayout(data)
 	if scanErr == nil {
 		return &patchInput{data, data, layout, path}, nil
+	}
+	// Only missing signatures may be caused by an already-patched image.
+	// Internal definition errors and ambiguous matches must be reported directly.
+	var matchErr *signatureMatchError
+	if !errors.As(scanErr, &matchErr) || matchErr.count != 0 {
+		return nil, scanErr
 	}
 	manifestData, err := readLimited(path+".dimraeth_patch.json", 1<<20)
 	if err == nil {

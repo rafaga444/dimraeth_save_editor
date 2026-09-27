@@ -1,5 +1,6 @@
 # Patch notes — September 27, 2026
 
+- Fixed an extra NOP in SkillPointOverGrantPersists; early-return padding is now calculated from the target length. Internal patch errors no longer suggest restoring a backup.
 - Replaced fixed offsets and the build SHA whitelist with wildcard AOB signatures across all executable PE sections, including il2cpp.
 - Added Scan only to verify all 19 patch targets and display their sections and addresses without writing files.
 - Reject missing or ambiguous signatures, invalid target bytes, and overlapping patches before writing the DLL.

@@ -63,6 +63,13 @@ func (p aob) matches(data []byte, offset int) bool {
 	return true
 }
 
+type signatureMatchError struct {
+	message string
+	count   int
+}
+
+func (e *signatureMatchError) Error() string { return e.message }
+
 type aobMatch struct {
 	offset  int
 	section section
@@ -126,7 +133,10 @@ func (r *aobResolver) resolve(label, signature string) (aobMatch, error) {
 		for _, m := range found {
 			details += fmt.Sprintf("\n  %s: file=0x%X, VA=0x%X", m.section.name, m.offset, m.va)
 		}
-		return aobMatch{}, fmt.Errorf("%s: expected exactly 1 AOB match, found %d.%s\nThis game build changed too much or the signature became ambiguous. No DLL modifications were written", label, count, details)
+		return aobMatch{}, &signatureMatchError{
+			message: fmt.Sprintf("%s: expected exactly 1 AOB match, found %d.%s\nThis game build changed too much or the signature became ambiguous. No DLL modifications were written", label, count, details),
+			count:   count,
+		}
 	}
 	r.cache[signature] = found[0]
 	return found[0], nil
@@ -163,26 +173,27 @@ func resolvePatchLayout(data []byte) (*patchLayout, error) {
 		name, signature              string
 		rel                          int
 		expected, replacement, group string
+		padNOP                       bool
 	}{
-		{"XP level-loop cap", SIG_MAX_LEVEL_PAIR, 0, "83 FB 19", "", "level"},
-		{"XP final cap", SIG_MAX_LEVEL_PAIR, 7, "B9 19 00 00 00", "", "level"},
-		{"Highest-level initialization", SIG_HIGHEST_LEVEL, 0, "BA 19 00 00 00", "", "level"},
-		{"ValidateLoadedXPData", SIG_VALIDATE_LOADED_XP, 0, "40 53 55 56 57 41 56 48", "c390909090909090", "attributes"},
-		{"ValidateAttributeXPConsistency", SIG_VALIDATE_ATTRIBUTE_XP, 0, "48 89 4C 24 08 53 56 57", "c390909090909090", "attributes"},
-		{"ValidateXPInvariants", SIG_VALIDATE_XP_INVARIANTS, 0, "48 89 4C 24 08 53 56 57", "b001c39090909090", "attributes"},
-		{"ValidateXPState", SIG_VALIDATE_XP_STATE, 0, "48 89 4C 24 08 53 56 57", "b001c39090909090", "attributes"},
-		{"CanReachNextLevel", SIG_ATTRIBUTE_CAP_1, 13, "83 F8 63 0F 8D D8 FE FF FF", "83f863909090909090", "cap"},
-		{"TrySpendPoint", SIG_ATTRIBUTE_CAP_2, 14, "83 F8 63 0F 8D 0A 01 00 00", "83f863909090909090", "cap"},
-		{"ApplyUpgradeAttributeInternal", SIG_ATTRIBUTE_CAP_3, 16, "83 F8 63 0F 8D 74 04 00 00", "83f863909090909090", "cap"},
-		{"UpgradeAttributeServerRpc", SIG_ATTRIBUTE_CAP_4, 16, "83 F8 63 0F 8D FC 04 00 00", "83f863909090909090", "cap"},
-		{"SkillPointOverGrantPersists", SIG_SKILL_OVER_GRANT, 0, "40 53 48 83 EC 20 48 8B D9 41 3B D0 7E 42 0F 57", "31c0c39090909090909090909090909090", "skills"},
-		{"Edited skill points preserved", SIG_SKILL_RECONCILE, 13, "0F 84 99 02 00 00", "0f8e99020000", "skills"},
-		{"LootChanceMultiplier", SIG_LOOT_MULTIPLIER, 0, "48 83 EC 28 33 D2 E8 25 F8 FF", "", "loot"},
-		{"ReturnRandomRuneData rarity", SIG_RETURN_RANDOM_RUNE, 12, "E8 ?? ?? ?? ??", "", "loot"},
-		{"Positive item drops", SIG_GUARANTEED_ITEM, 14, "44 3B F0 7D AB", "85c07eac90", "rng"},
-		{"RuneDropCheck equipment drops", SIG_GUARANTEED_EQUIPMENT, 14, "33 D2 45 33 C0 0F 28 C6 E8 ?? ?? ?? ??", "31c00f57c00f2ff00f97c09090", "rng"},
-		{"GearLegality.Inspect", SIG_GEAR_LEGALITY_INSPECT, 0, "40 55 53 48 8D 6C 24 D8", "31c0c39090909090", "rng"},
-		{"ReturnRandomRuneData stars", SIG_RETURN_RANDOM_RUNE, 31, "E8 ?? ?? ?? ??", "", "stars"},
+		{"XP level-loop cap", SIG_MAX_LEVEL_PAIR, 0, "83 FB 19", "", "level", false},
+		{"XP final cap", SIG_MAX_LEVEL_PAIR, 7, "B9 19 00 00 00", "", "level", false},
+		{"Highest-level initialization", SIG_HIGHEST_LEVEL, 0, "BA 19 00 00 00", "", "level", false},
+		{"ValidateLoadedXPData", SIG_VALIDATE_LOADED_XP, 0, "40 53 55 56 57 41 56 48", "c3", "attributes", true},
+		{"ValidateAttributeXPConsistency", SIG_VALIDATE_ATTRIBUTE_XP, 0, "48 89 4C 24 08 53 56 57", "c3", "attributes", true},
+		{"ValidateXPInvariants", SIG_VALIDATE_XP_INVARIANTS, 0, "48 89 4C 24 08 53 56 57", "b001c3", "attributes", true},
+		{"ValidateXPState", SIG_VALIDATE_XP_STATE, 0, "48 89 4C 24 08 53 56 57", "b001c3", "attributes", true},
+		{"CanReachNextLevel", SIG_ATTRIBUTE_CAP_1, 13, "83 F8 63 0F 8D D8 FE FF FF", "83f863909090909090", "cap", false},
+		{"TrySpendPoint", SIG_ATTRIBUTE_CAP_2, 14, "83 F8 63 0F 8D 0A 01 00 00", "83f863909090909090", "cap", false},
+		{"ApplyUpgradeAttributeInternal", SIG_ATTRIBUTE_CAP_3, 16, "83 F8 63 0F 8D 74 04 00 00", "83f863909090909090", "cap", false},
+		{"UpgradeAttributeServerRpc", SIG_ATTRIBUTE_CAP_4, 16, "83 F8 63 0F 8D FC 04 00 00", "83f863909090909090", "cap", false},
+		{"SkillPointOverGrantPersists", SIG_SKILL_OVER_GRANT, 0, "40 53 48 83 EC 20 48 8B D9 41 3B D0 7E 42 0F 57", "31c0c3", "skills", true},
+		{"Edited skill points preserved", SIG_SKILL_RECONCILE, 13, "0F 84 99 02 00 00", "0f8e99020000", "skills", false},
+		{"LootChanceMultiplier", SIG_LOOT_MULTIPLIER, 0, "48 83 EC 28 33 D2 E8 25 F8 FF", "", "loot", false},
+		{"ReturnRandomRuneData rarity", SIG_RETURN_RANDOM_RUNE, 12, "E8 ?? ?? ?? ??", "", "loot", false},
+		{"Positive item drops", SIG_GUARANTEED_ITEM, 14, "44 3B F0 7D AB", "85c07eac90", "rng", false},
+		{"RuneDropCheck equipment drops", SIG_GUARANTEED_EQUIPMENT, 14, "33 D2 45 33 C0 0F 28 C6 E8 ?? ?? ?? ??", "31c00f57c00f2ff00f97c09090", "rng", false},
+		{"GearLegality.Inspect", SIG_GEAR_LEGALITY_INSPECT, 0, "40 55 53 48 8D 6C 24 D8", "31c0c3", "rng", true},
+		{"ReturnRandomRuneData stars", SIG_RETURN_RANDOM_RUNE, 31, "E8 ?? ?? ?? ??", "", "stars", false},
 	}
 	for _, spec := range specs {
 		match, err := r.resolve(spec.name, spec.signature)
@@ -201,8 +212,18 @@ func resolvePatchLayout(data []byte) (*patchLayout, error) {
 		replacement := bytes.Clone(original)
 		if spec.replacement != "" {
 			replacement, err = hex.DecodeString(spec.replacement)
-			if err != nil || len(replacement) != len(original) {
-				return nil, fmt.Errorf("%s: replacement size does not match target size. No DLL modifications were written", spec.name)
+			if err != nil {
+				return nil, fmt.Errorf("Internal patch definition error for %s: invalid replacement encoding. No DLL modifications were written", spec.name)
+			}
+			if spec.padNOP && len(replacement) <= len(original) {
+				// Early-return bodies contain only their opcodes; derive the NOP
+				// count from the verified original instruction window.
+				padded := bytes.Repeat([]byte{0x90}, len(original))
+				copy(padded, replacement)
+				replacement = padded
+			}
+			if len(replacement) != len(original) {
+				return nil, fmt.Errorf("Internal patch definition error for %s: replacement has %d bytes, target has %d. No DLL modifications were written", spec.name, len(replacement), len(original))
 			}
 		}
 		p := instructionPatch{offset, original, replacement}
